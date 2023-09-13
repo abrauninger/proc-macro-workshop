@@ -16,6 +16,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
 
             let mut builder_struct_members = Vec::with_capacity(fields.len());
             let mut builder_function_initializers = Vec::with_capacity(fields.len());
+            let mut builder_function_members = Vec::with_capacity(fields.len());
 
             for field in fields {
                 let Field { ident: field_name, ty, .. } = &field;
@@ -29,6 +30,15 @@ pub fn derive(input: TokenStream) -> TokenStream {
                 builder_function_initializers.push(
                     quote! {
                         #field_name: None,
+                    }
+                );
+
+                builder_function_members.push(
+                    quote! {
+                        fn #field_name(&mut self, #field_name: #ty) -> &mut Self {
+                            self.#field_name = Some(#field_name);
+                            self
+                        }
                     }
                 );
             }
@@ -46,6 +56,10 @@ pub fn derive(input: TokenStream) -> TokenStream {
 
                 pub struct #builder_name {
                     #(#builder_struct_members)*
+                }
+
+                impl #builder_name {
+                    #(#builder_function_members)*
                 }
             };
 
