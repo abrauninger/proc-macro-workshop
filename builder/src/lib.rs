@@ -12,23 +12,28 @@ pub fn derive(input: TokenStream) -> TokenStream {
         let fields = &data_struct.fields;
 
         if let Fields::Named(fields) = fields {
-            let builder_name = format_ident!("{}Builder", struct_name);
+            let fields = &fields.named;
 
-            let builder_struct_members: Vec<_> = fields.named.iter().map(|field| {
+            let mut builder_struct_members = Vec::with_capacity(fields.len());
+            let mut builder_function_initializers = Vec::with_capacity(fields.len());
+
+            for field in fields {
                 let Field { ident: field_name, ty, .. } = &field;
 
-                quote! {
-                    #field_name: Option<#ty>,
-                }
-            }).collect();
+                builder_struct_members.push(
+                    quote! {
+                        #field_name: Option<#ty>,
+                    }
+                );
 
-            let builder_function_initializers: Vec<_> = fields.named.iter().map(|field| {
-                let Field { ident: field_name, .. } = &field;
+                builder_function_initializers.push(
+                    quote! {
+                        #field_name: None,
+                    }
+                );
+            }
 
-                quote! {
-                    #field_name: None,
-                }
-            }).collect();
+            let builder_name = format_ident!("{}Builder", struct_name);
 
             let expanded = quote! {
                 impl #struct_name {
