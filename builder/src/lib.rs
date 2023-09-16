@@ -107,7 +107,6 @@ fn effective_types(field_type: &Type, is_built_vec: bool) -> EffectiveTypes {
         match inner_type(field_type, "Vec") {
             Some(inner_type) => EffectiveTypes {
                 builder_member_type: parse_quote! { Option<#field_type> },
-                //builder_member_type: field_type.clone(),
                 builder_function_arg_type: field_type.clone(),
                 vec_builder_function_arg_type: Some(inner_type.clone()),
                 is_optional: true,
@@ -158,18 +157,18 @@ pub fn derive(input: TokenStream) -> TokenStream {
             for field in fields {
                 let Field { ident: field_name, ty: field_type, attrs, .. } = &field;
 
-                let vec_builder_name_value = match vec_builder_name(attrs) {
-                    Ok(builder_name) => builder_name,
-                    Err(error) => {
-                        return error.to_compile_error().into();
-                    },
-                };
-
-                let vec_builder_name_ident = vec_builder_name_value.map(|value| { format_ident!("{}", value) });
-
-                let EffectiveTypes { builder_member_type, builder_function_arg_type, vec_builder_function_arg_type, is_optional } = effective_types(field_type, vec_builder_name_ident.is_some());
-
                 if let Some(field_name) = field_name {
+                    let vec_builder_name_value = match vec_builder_name(attrs) {
+                        Ok(builder_name) => builder_name,
+                        Err(error) => {
+                            return error.to_compile_error().into();
+                        },
+                    };
+
+                    let vec_builder_name_ident = vec_builder_name_value.map(|value| { format_ident!("{}", value) });
+
+                    let EffectiveTypes { builder_member_type, builder_function_arg_type, vec_builder_function_arg_type, is_optional } = effective_types(field_type, vec_builder_name_ident.is_some());
+
                     builder_struct_members.push(
                         quote! {
                             #field_name: #builder_member_type,
@@ -183,7 +182,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
                     );
 
                     let generate_all_at_once_member_builder = match &vec_builder_name_ident {
-                        Some(each_name) => each_name != field_name,
+                        Some(builder_name) => builder_name != field_name,
                         None => true,
                     };
 
