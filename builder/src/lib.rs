@@ -19,39 +19,35 @@ use syn::{
     PathArguments,
     Token,
     Type,
+    TypePath,
 };
 
 fn inner_type<'a>(ty: &'a Type, outer_type_name: &'static str) -> Option<&'a Type> {
     match ty {
-        Type::Path(type_path) => {
-            match type_path.qself {
-                None => {
-                    let segments = &type_path.path.segments;
-                    if segments.len() == 1 {
-                        let segment = &segments[0];
-                        if segment.ident == outer_type_name {
-                            match &segment.arguments {
-                                PathArguments::AngleBracketed(generic_args) => {
-                                    if generic_args.args.len() == 1 {
-                                        let arg = &generic_args.args[0];
-                                        match arg {
-                                            syn::GenericArgument::Type(inner_type) => Some(inner_type),
-                                            _ => None,
-                                        }
-                                    } else {
-                                        None
-                                    }
-                                },
-                                _ => None,
+        Type::Path(TypePath { qself: None, path }) => {
+            let segments = &path.segments;
+            if segments.len() == 1 {
+                let segment = &segments[0];
+                if segment.ident == outer_type_name {
+                    match &segment.arguments {
+                        PathArguments::AngleBracketed(generic_args) => {
+                            if generic_args.args.len() == 1 {
+                                let arg = &generic_args.args[0];
+                                match arg {
+                                    syn::GenericArgument::Type(inner_type) => Some(inner_type),
+                                    _ => None,
+                                }
+                            } else {
+                                None
                             }
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
+                        },
+                        _ => None,
                     }
-                },
-                Some(_) => None,
+                } else {
+                    None
+                }
+            } else {
+                None
             }
         },
         _ => None,
