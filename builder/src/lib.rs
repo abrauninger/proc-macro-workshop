@@ -110,8 +110,8 @@ fn effective_types(field_type: &Type, is_built_vec: bool) -> EffectiveTypes {
     if is_built_vec {
         match inner_type(field_type, "Vec") {
             Some(inner_type) => EffectiveTypes {
-                //builder_member_type: parse_quote! { Option<#field_type> },
-                builder_member_type: field_type.clone(),
+                builder_member_type: parse_quote! { Option<#field_type> },
+                //builder_member_type: field_type.clone(),
                 builder_function_arg_type: field_type.clone(),
                 vec_builder_function_arg_type: Some(inner_type.clone()),
                 is_optional: true,
@@ -180,22 +180,11 @@ pub fn derive(input: TokenStream) -> TokenStream {
                         }
                     );
 
-                    match vec_builder_function_arg_type {
-                        Some(_) => {
-                            builder_function_initializers.push(
-                                quote! {
-                                    #field_name: vec![],
-                                }
-                            );
-                        },
-                        None => {
-                            builder_function_initializers.push(
-                                quote! {
-                                    #field_name: None,
-                                }
-                            );
+                    builder_function_initializers.push(
+                        quote! {
+                            #field_name: None,
                         }
-                    }
+                    );
 
                     let generate_all_at_once_member_builder = match &builder_each_name_ident {
                         Some(each_name) => each_name != field_name,
@@ -203,39 +192,26 @@ pub fn derive(input: TokenStream) -> TokenStream {
                     };
 
                     if generate_all_at_once_member_builder {
-                        match vec_builder_function_arg_type {
-                            Some(_) => {
-                                builder_function_members.push(
-                                    quote! {
-                                        fn #field_name(&mut self, #field_name: #builder_function_arg_type) -> &mut Self {
-                                            self.#field_name = #field_name;
-                                            self
-                                        }
-                                    }
-                                );
-                            },
-                            None => {
-                                builder_function_members.push(
-                                    quote! {
-                                        fn #field_name(&mut self, #field_name: #builder_function_arg_type) -> &mut Self {
-                                            self.#field_name = Some(#field_name);
-                                            self
-                                        }
-                                    }
-                                );
+                        builder_function_members.push(
+                            quote! {
+                                fn #field_name(&mut self, #field_name: #builder_function_arg_type) -> &mut Self {
+                                    self.#field_name = Some(#field_name);
+                                    self
+                                }
                             }
-                        }
+                        );
                     }
 
-                    let error_message = format!("{} has not been set", field_name);
+                    let none_arm = match vec_builder_function_arg_type {
+                        Some(_) => quote! { vec![] },
+                        None => {
+                            let error_message = format!("{} has not been set", field_name);
+                            quote! { return Err(#error_message.to_string().into()) }
+                        }
+                    };
 
-                    // TODO: Don't clone the vectors.
                     build_member_variable_inits.push(
-                        if vec_builder_function_arg_type.is_some() {
-                            quote! {
-                                let #field_name = self.#field_name.clone();
-                            }
-                        } else if is_optional {
+                        if is_optional && vec_builder_function_arg_type.is_none() {
                             quote! {
                                 let #field_name = self.#field_name.take();
                             }
@@ -243,7 +219,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
                             quote! {
                                 let #field_name = match self.#field_name.take() {
                                     Some(#field_name) => #field_name,
-                                    None => return Err(#error_message.to_string().into()),
+                                    None => #none_arm,
                                 };
                             }
                         }
@@ -259,7 +235,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
                         let vec_builder_function_arg_type = vec_builder_function_arg_type.unwrap();
 
                         builder_function_members.push(
-                            /*quote! {
+                            quote! {
                                 fn #each_name(&mut self, item: #vec_builder_function_arg_type) -> &mut Self {
                                     match &mut self.#field_name {
                                         Some(#field_name) => {
@@ -269,13 +245,6 @@ pub fn derive(input: TokenStream) -> TokenStream {
                                             self.#field_name = Some(vec![item])
                                         }
                                     }
-                                    self
-                                }
-                            }*/
-
-                            quote! {
-                                fn #each_name(&mut self, item: #vec_builder_function_arg_type) -> &mut Self {
-                                    self.#field_name.push(item);
                                     self
                                 }
                             }
