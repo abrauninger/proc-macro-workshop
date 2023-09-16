@@ -73,7 +73,7 @@ impl Parse for VecBuilderInfo {
     }
 }
 
-fn builder_each_name(attrs: &Vec<Attribute>) -> syn::Result<Option<String>> {
+fn vec_builder_name(attrs: &Vec<Attribute>) -> syn::Result<Option<String>> {
     if let [attr] = attrs.as_slice() {
         match &attr.meta {
             syn::Meta::List(MetaList { path, delimiter, tokens, .. }) => {
@@ -158,16 +158,16 @@ pub fn derive(input: TokenStream) -> TokenStream {
             for field in fields {
                 let Field { ident: field_name, ty: field_type, attrs, .. } = &field;
 
-                let builder_each_name_value = match builder_each_name(attrs) {
-                    Ok(each_name) => each_name,
+                let vec_builder_name_value = match vec_builder_name(attrs) {
+                    Ok(builder_name) => builder_name,
                     Err(error) => {
                         return error.to_compile_error().into();
                     },
                 };
 
-                let builder_each_name_ident = builder_each_name_value.map(|value| { format_ident!("{}", value) });
+                let vec_builder_name_ident = vec_builder_name_value.map(|value| { format_ident!("{}", value) });
 
-                let EffectiveTypes { builder_member_type, builder_function_arg_type, vec_builder_function_arg_type, is_optional } = effective_types(field_type, builder_each_name_ident.is_some());
+                let EffectiveTypes { builder_member_type, builder_function_arg_type, vec_builder_function_arg_type, is_optional } = effective_types(field_type, vec_builder_name_ident.is_some());
 
                 if let Some(field_name) = field_name {
                     builder_struct_members.push(
@@ -182,7 +182,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
                         }
                     );
 
-                    let generate_all_at_once_member_builder = match &builder_each_name_ident {
+                    let generate_all_at_once_member_builder = match &vec_builder_name_ident {
                         Some(each_name) => each_name != field_name,
                         None => true,
                     };
@@ -227,12 +227,12 @@ pub fn derive(input: TokenStream) -> TokenStream {
                         }
                     );
 
-                    if let Some(each_name) = &builder_each_name_ident {
+                    if let Some(vec_builder_name) = &vec_builder_name_ident {
                         let vec_builder_function_arg_type = vec_builder_function_arg_type.unwrap();
 
                         builder_function_members.push(
                             quote! {
-                                fn #each_name(&mut self, item: #vec_builder_function_arg_type) -> &mut Self {
+                                fn #vec_builder_name(&mut self, item: #vec_builder_function_arg_type) -> &mut Self {
                                     match &mut self.#field_name {
                                         Some(#field_name) => {
                                             #field_name.push(item)
