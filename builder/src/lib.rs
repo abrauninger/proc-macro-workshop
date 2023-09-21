@@ -79,8 +79,10 @@ fn vec_builder_name(attrs: &Vec<Attribute>) -> syn::Result<Option<String>> {
             syn::Meta::List(MetaList { path, delimiter, tokens, .. }) => {
                 if path.is_ident("builder") {
                     if let MacroDelimiter::Paren(_) = delimiter {
-                        let builder_info = syn::parse2::<VecBuilderInfo>(tokens.clone())?;
-                        Ok(Some(builder_info.each_name.value()))
+                        match syn::parse2::<VecBuilderInfo>(tokens.clone()) {
+                            Ok(builder_info) => Ok(Some(builder_info.each_name.value())),
+                            Err(_) => Err(syn::Error::new_spanned(attr.meta.clone(), "expected `builder(each = \"...\")`")),
+                        }
                     } else {
                         Ok(None)
                     }
