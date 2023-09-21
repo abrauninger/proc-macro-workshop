@@ -108,13 +108,13 @@ fn effective_types(field_type: &Type, is_built_vec: bool) -> EffectiveTypes {
     if is_built_vec {
         match inner_type(field_type, "Vec") {
             Some(inner_type) => EffectiveTypes {
-                builder_member_type: parse_quote! { Option<#field_type> },
+                builder_member_type: parse_quote! { std::option::Option<#field_type> },
                 builder_function_arg_type: field_type.clone(),
                 vec_builder_function_arg_type: Some(inner_type.clone()),
                 is_optional: true,
             },
             None => EffectiveTypes {
-                builder_member_type: parse_quote! { Option<#field_type> },
+                builder_member_type: parse_quote! { std::option::Option<#field_type> },
                 builder_function_arg_type: field_type.clone(),
                 vec_builder_function_arg_type: None,
                 is_optional: false,
@@ -129,7 +129,7 @@ fn effective_types(field_type: &Type, is_built_vec: bool) -> EffectiveTypes {
                 is_optional: true,
             },
             None => EffectiveTypes {
-                builder_member_type: parse_quote! { Option<#field_type> },
+                builder_member_type: parse_quote! { std::option::Option<#field_type> },
                 builder_function_arg_type: field_type.clone(),
                 vec_builder_function_arg_type: None,
                 is_optional: false,
@@ -268,7 +268,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
                 impl #builder_name {
                     #(#builder_function_members)*
 
-                    pub fn build(&mut self) -> Result<#struct_name, Box<dyn std::error::Error>> {
+                    pub fn build(&mut self) -> std::result::Result<#struct_name, std::boxed::Box<dyn std::error::Error>> {
                         #(#build_member_variable_inits)*
 
                         Ok(#struct_name {
