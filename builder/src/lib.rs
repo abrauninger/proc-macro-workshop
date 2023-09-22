@@ -55,7 +55,7 @@ fn inner_type<'a>(ty: &'a Type, outer_type_name: &'static str) -> Option<&'a Typ
 }
 
 struct VecBuilderInfo {
-    each_name: LitStr,
+    each_name: String,
 }
 
 impl Parse for VecBuilderInfo {
@@ -69,7 +69,7 @@ impl Parse for VecBuilderInfo {
 
         let each_name: LitStr = input.parse()?;
 
-        Ok(VecBuilderInfo { each_name })
+        Ok(VecBuilderInfo { each_name: each_name.value() })
     }
 }
 
@@ -80,7 +80,7 @@ fn vec_builder_name(attrs: &Vec<Attribute>) -> syn::Result<Option<String>> {
                 if path.is_ident("builder") {
                     if let MacroDelimiter::Paren(_) = delimiter {
                         match syn::parse2::<VecBuilderInfo>(tokens.clone()) {
-                            Ok(builder_info) => Ok(Some(builder_info.each_name.value())),
+                            Ok(builder_info) => Ok(Some(builder_info.each_name)),
                             Err(_) => Err(syn::Error::new_spanned(attr.meta.clone(), "expected `builder(each = \"...\")`")),
                         }
                     } else {
