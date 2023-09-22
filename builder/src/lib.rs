@@ -146,10 +146,8 @@ pub fn derive(input: TokenStream) -> TokenStream {
 
     let DeriveInput { ident: struct_name, data, .. } = derive_input;
 
-    if let Data::Struct(data_struct) = data {
-        let fields = data_struct.fields;
-
-        if let Fields::Named(fields) = fields {
+    if let Data::Struct(data) = data {
+        if let Fields::Named(fields) = data.fields {
             let fields = fields.named;
 
             let mut builder_struct_members = Vec::with_capacity(fields.len());
