@@ -75,18 +75,10 @@ impl Parse for VecBuilderInfo {
 
 fn vec_builder_name_from_attr(attr: &Attribute) -> syn::Result<Option<String>> {
     match &attr.meta {
-        syn::Meta::List(MetaList { path, delimiter, tokens, .. }) => {
-            if path.is_ident("builder") {
-                if let MacroDelimiter::Paren(_) = delimiter {
-                    match syn::parse2::<VecBuilderInfo>(tokens.clone()) {
-                        Ok(builder_info) => Ok(Some(builder_info.each_name)),
-                        Err(_) => Err(syn::Error::new_spanned(&attr.meta, "expected `builder(each = \"...\")`")),
-                    }
-                } else {
-                    Ok(None)
-                }
-            } else {
-                Ok(None)
+        syn::Meta::List(MetaList { path, delimiter: MacroDelimiter::Paren(_), tokens, .. }) if path.is_ident("builder") => {
+            match syn::parse2::<VecBuilderInfo>(tokens.clone()) {
+                Ok(builder_info) => Ok(Some(builder_info.each_name)),
+                Err(_) => Err(syn::Error::new_spanned(&attr.meta, "expected `builder(each = \"...\")`")),
             }
         },
         _ => Ok(None),
