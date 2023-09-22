@@ -10,10 +10,13 @@ use syn::{
     Field,
     Fields,
     FieldsNamed,
+    Generics,
+    GenericParam,
     Lit,
     Meta,
     MetaNameValue,
     parse_macro_input,
+    parse_quote,
 };
 
 fn custom_format_from_debug_attribute(attrs: &Vec<Attribute>) -> syn::Result<Option<String>> {
@@ -36,6 +39,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
     match derive_input {
         DeriveInput {
             ident: struct_name,
+            generics,
             data: Data::Struct(
                 DataStruct {
                     fields: Fields::Named(FieldsNamed { named: fields, .. }), ..
@@ -68,8 +72,11 @@ pub fn derive(input: TokenStream) -> TokenStream {
 
             let struct_name_string = struct_name.to_string();
 
+            let generics = add_trait_bounds(generics);
+            let (impl_generics, struct_generics, _) = generics.split_for_impl();
+
             TokenStream::from(quote! {
-                impl std::fmt::Debug for #struct_name {
+                impl #impl_generics std::fmt::Debug for #struct_name #struct_generics {
                     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                         fmt.debug_struct(#struct_name_string)
                             #debug_struct_fields
@@ -80,4 +87,13 @@ pub fn derive(input: TokenStream) -> TokenStream {
         },
         _ => TokenStream::new(),
     }
+}
+
+fn add_trait_bounds(mut generics: Generics) -> Generics {
+    for param in &mut generics.params {
+        if let GenericParam::Type(type_param) = param {
+            type_param.bounds.push(parse_quote!(std::fmt::Debug));
+        }
+    }
+    generics
 }
