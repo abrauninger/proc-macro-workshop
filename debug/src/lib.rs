@@ -1,8 +1,35 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{Data, DeriveInput, parse_macro_input, DataStruct, Fields, FieldsNamed, Field};
+use syn::{
+    Attribute,
+    Data,
+    DataStruct,
+    DeriveInput,
+    Expr,
+    ExprLit,
+    Field,
+    Fields,
+    FieldsNamed,
+    Lit,
+    Meta,
+    MetaNameValue,
+    parse_macro_input,
+};
 
-#[proc_macro_derive(CustomDebug)]
+fn custom_format_from_debug_attribute(attrs: &Vec<Attribute>) -> syn::Result<Option<String>> {
+    match attrs.as_slice() {
+        [attr @ Attribute { meta: Meta::NameValue(MetaNameValue { path, value, .. }), .. }] if path.is_ident("debug") => {
+            if let Expr::Lit(ExprLit { lit: Lit::Str(lit_str), .. }) = value {
+                Ok(Some(lit_str.value()))
+            } else {
+                Err(syn::Error::new_spanned(attr.meta.clone(), "expected `debug = \"...\"`"))
+            }
+        },
+        _ => Ok(None),
+    }
+}
+
+#[proc_macro_derive(CustomDebug, attributes(debug))]
 pub fn derive(input: TokenStream) -> TokenStream {
     let derive_input = parse_macro_input!(input as DeriveInput);
 
@@ -15,10 +42,23 @@ pub fn derive(input: TokenStream) -> TokenStream {
         ), ..
     } = derive_input {
         let debug_struct_fields: proc_macro2::TokenStream = fields.iter().map(|field| {
-            if let Field { ident: Some(field_name), .. } = &field {
+            if let Field { ident: Some(field_name), attrs, .. } = &field {
                 let field_name_string = field_name.to_string();
+
+                let custom_format = match custom_format_from_debug_attribute(attrs) {
+                    Ok(custom_format) => custom_format,
+                    Err(error) => {
+                        return error.to_compile_error().into();
+                    }
+                };
+
+                let format = match custom_format {
+                    Some(custom_format) => quote! { &format_args!(#custom_format, &self.#field_name) },
+                    None => quote! { &self.#field_name },
+                };
+
                 quote! {
-                    .field(#field_name_string, &self.#field_name)
+                    .field(#field_name_string, #format)
                 }
             } else {
                 quote! {}
