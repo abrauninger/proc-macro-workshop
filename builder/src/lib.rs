@@ -85,10 +85,10 @@ fn vec_builder_name_from_attr(attr: &Attribute) -> syn::Result<Option<String>> {
     }
 }
 
-fn vec_builder_name(attrs: Vec<Attribute>) -> syn::Result<Option<String>> {
+fn vec_builder_name(attrs: &Vec<Attribute>) -> syn::Result<Option<String>> {
     let mut unique_builder_name = None;
 
-    for attr in &attrs {
+    for attr in attrs {
         let builder_name = vec_builder_name_from_attr(&attr)?;
         if builder_name.is_some() && unique_builder_name.is_some() {
             return Err(syn::Error::new_spanned(&attr.meta, "expected only one `builder` attribute"));
@@ -162,7 +162,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
                 let Field { ident: field_name, ty: field_type, attrs, .. } = field;
 
                 if let Some(field_name) = field_name {
-                    let vec_builder_name_value = match vec_builder_name(attrs) {
+                    let vec_builder_name_value = match vec_builder_name(&attrs) {
                         Ok(builder_name) => builder_name,
                         Err(error) => {
                             return error.to_compile_error().into();
