@@ -19,7 +19,7 @@ use syn::{
     PathArguments,
     Token,
     Type,
-    TypePath,
+    TypePath, spanned::Spanned,
 };
 
 fn inner_type<'a>(ty: &'a Type, outer_type_name: &'static str) -> Option<&'a Type> {
@@ -99,47 +99,6 @@ fn vec_builder_name(attrs: &Vec<Attribute>) -> syn::Result<Option<String>> {
     Ok(unique_builder_name)
 }
 
-struct EffectiveTypes {
-    builder_member_type: Type,
-    builder_function_arg_type: Type,
-    vec_builder_function_arg_type: Option<Type>,
-    is_optional: bool,
-}
-
-fn effective_types(field_type: &Type, is_built_vec: bool) -> EffectiveTypes {
-    if is_built_vec {
-        match inner_type(field_type, "Vec") {
-            Some(inner_type) => EffectiveTypes {
-                builder_member_type: parse_quote! { std::option::Option<#field_type> },
-                builder_function_arg_type: field_type.clone(),
-                vec_builder_function_arg_type: Some(inner_type.clone()),
-                is_optional: true,
-            },
-            None => EffectiveTypes {
-                builder_member_type: parse_quote! { std::option::Option<#field_type> },
-                builder_function_arg_type: field_type.clone(),
-                vec_builder_function_arg_type: None,
-                is_optional: false,
-            }
-        }
-    } else {
-        match inner_type(field_type, "Option") {
-            Some(inner_type) => EffectiveTypes {
-                builder_member_type: field_type.clone(),
-                builder_function_arg_type: inner_type.clone(),
-                vec_builder_function_arg_type: None,
-                is_optional: true,
-            },
-            None => EffectiveTypes {
-                builder_member_type: parse_quote! { std::option::Option<#field_type> },
-                builder_function_arg_type: field_type.clone(),
-                vec_builder_function_arg_type: None,
-                is_optional: false,
-            }
-        }
-    }
-}
-
 #[proc_macro_derive(Builder, attributes(builder))]
 pub fn derive(input: TokenStream) -> TokenStream {
     let derive_input = parse_macro_input!(input as DeriveInput);
@@ -163,13 +122,58 @@ pub fn derive(input: TokenStream) -> TokenStream {
                     let vec_builder_name_value = match vec_builder_name(&attrs) {
                         Ok(builder_name) => builder_name,
                         Err(error) => {
-                            return error.to_compile_error().into();
+                            return error
+                                .to_compile_error()
+                                .into();
                         },
                     };
 
                     let vec_builder_name_ident = vec_builder_name_value.map(|value| { format_ident!("{}", value) });
 
-                    let EffectiveTypes { builder_member_type, builder_function_arg_type, vec_builder_function_arg_type, is_optional } = effective_types(&field_type, vec_builder_name_ident.is_some());
+                    let is_built_vec = vec_builder_name_ident.is_some();
+
+                    let option_inner_type = inner_type(&field_type, "Option");
+                    let vec_inner_type = inner_type(&field_type, "Vec");
+
+                    let builder_member_type =
+                        if is_built_vec {
+                            match vec_inner_type {
+                                Some(_) => parse_quote! { std::option::Option<#field_type> },
+                                None => {
+                                    return syn::Error::new(field_type.span(), "the `builder` attribute should only be used on fields of type `Vec<_>`")
+                                        .to_compile_error()
+                                        .into();
+                                }
+                            }
+                        } else {
+                            match option_inner_type {
+                                Some(_) => field_type.clone(),
+                                None => parse_quote! { std::option::Option<#field_type> },
+                            }
+                        };
+
+                    let builder_function_arg_type = match (is_built_vec, option_inner_type) {
+                        (false, Some(inner_type)) => inner_type.clone(),
+                        _ => field_type.clone(),
+                    };
+
+                    let vec_builder_function_arg_type = match (is_built_vec, vec_inner_type) {
+                        (true, Some(inner_type)) => Some(inner_type.clone()),
+                        _ => None,
+                    };
+
+                    let is_optional =
+                        if is_built_vec {
+                            match vec_inner_type {
+                                Some(_) => true,
+                                None => false,
+                            }
+                        } else {
+                            match option_inner_type {
+                                Some(_) => true,
+                                None => false,
+                            }
+                        };
 
                     builder_struct_members.push(
                         quote! {
