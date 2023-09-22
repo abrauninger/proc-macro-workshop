@@ -73,28 +73,38 @@ impl Parse for VecBuilderInfo {
     }
 }
 
-fn vec_builder_name(attrs: Vec<Attribute>) -> syn::Result<Option<String>> {
-    if let [attr] = attrs.as_slice() {
-        match &attr.meta {
-            syn::Meta::List(MetaList { path, delimiter, tokens, .. }) => {
-                if path.is_ident("builder") {
-                    if let MacroDelimiter::Paren(_) = delimiter {
-                        match syn::parse2::<VecBuilderInfo>(tokens.clone()) {
-                            Ok(builder_info) => Ok(Some(builder_info.each_name)),
-                            Err(_) => Err(syn::Error::new_spanned(attr.meta.clone(), "expected `builder(each = \"...\")`")),
-                        }
-                    } else {
-                        Ok(None)
+fn vec_builder_name_from_attr(attr: &Attribute) -> syn::Result<Option<String>> {
+    match &attr.meta {
+        syn::Meta::List(MetaList { path, delimiter, tokens, .. }) => {
+            if path.is_ident("builder") {
+                if let MacroDelimiter::Paren(_) = delimiter {
+                    match syn::parse2::<VecBuilderInfo>(tokens.clone()) {
+                        Ok(builder_info) => Ok(Some(builder_info.each_name)),
+                        Err(_) => Err(syn::Error::new_spanned(&attr.meta, "expected `builder(each = \"...\")`")),
                     }
                 } else {
                     Ok(None)
                 }
-            },
-            _ => Ok(None),
-        }
-    } else {
-        Ok(None)
+            } else {
+                Ok(None)
+            }
+        },
+        _ => Ok(None),
     }
+}
+
+fn vec_builder_name(attrs: Vec<Attribute>) -> syn::Result<Option<String>> {
+    let mut unique_builder_name = None;
+
+    for attr in &attrs {
+        let builder_name = vec_builder_name_from_attr(&attr)?;
+        if builder_name.is_some() && unique_builder_name.is_some() {
+            return Err(syn::Error::new_spanned(&attr.meta, "expected only one `builder` attribute"));
+        }
+        unique_builder_name = builder_name;
+    }
+
+    Ok(unique_builder_name)
 }
 
 struct EffectiveTypes {
