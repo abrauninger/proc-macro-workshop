@@ -17,6 +17,9 @@ use syn::{
     MetaNameValue,
     parse_macro_input,
     parse_quote,
+    punctuated::Punctuated,
+    token::Comma,
+    Type::Path, TypePath, PathSegment, PathArguments,
 };
 
 fn custom_format_from_debug_attribute(attrs: &Vec<Attribute>) -> syn::Result<Option<String>> {
@@ -72,7 +75,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
 
             let struct_name_string = struct_name.to_string();
 
-            let generics = add_trait_bounds(generics);
+            let generics = add_trait_bounds(generics, &fields);
             let (impl_generics, struct_generics, _) = generics.split_for_impl();
 
             TokenStream::from(quote! {
@@ -89,10 +92,38 @@ pub fn derive(input: TokenStream) -> TokenStream {
     }
 }
 
-fn add_trait_bounds(mut generics: Generics) -> Generics {
+fn add_trait_bounds(mut generics: Generics, fields: &Punctuated<Field, Comma>) -> Generics {
     for param in &mut generics.params {
         if let GenericParam::Type(type_param) = param {
-            type_param.bounds.push(parse_quote!(std::fmt::Debug));
+            // Special case for PhantomData, which is very common and which implements Debug
+            // regardless of its type parameters.
+            //
+            // Only add the trait bound if this type parameter is used outside a PhantomData field.
+            let used_outside_phantom_data = fields.iter().find(|&f| {
+                match &f.ty {
+                    Path(TypePath { qself: None, path: syn::Path { segments, leading_colon: None } }) => {
+                        if segments.len() == 1 {
+                            match segments.first() {
+                                Some(PathSegment { ident, arguments: PathArguments::None }) => {
+                                    if *ident == type_param.ident {
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                },
+                                _ => { false },
+                            }
+                        } else {
+                            false
+                        }
+                    },
+                    _ => false,
+                }
+            }).is_some();
+
+            if used_outside_phantom_data {
+                type_param.bounds.push(parse_quote!(std::fmt::Debug));
+            }
         }
     }
     generics
