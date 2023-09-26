@@ -28,15 +28,23 @@ use syn::{
 };
 
 fn custom_format_from_debug_attribute(attrs: &Vec<Attribute>) -> syn::Result<Option<String>> {
-    match attrs.as_slice() {
-        [attr @ Attribute { meta: Meta::NameValue(MetaNameValue { path, value, .. }), .. }] if path.is_ident("debug") => {
-            if let Expr::Lit(ExprLit { lit: Lit::Str(lit_str), .. }) = value {
+    if let [attr] = attrs.as_slice() {
+        if_chain! {
+            if let Attribute { meta, .. } = attr;
+            if let Meta::NameValue(meta) = meta;
+            let MetaNameValue { path, value, .. } = meta;
+            if path.is_ident("debug");
+            if let Expr::Lit(lit) = value;
+            let ExprLit { lit, .. } = lit;
+            if let Lit::Str(lit_str) = lit;
+            then {
                 Ok(Some(lit_str.value()))
             } else {
                 Err(syn::Error::new_spanned(&attr.meta, "expected `debug = \"...\"`"))
             }
-        },
-        _ => Ok(None),
+        }
+    } else {
+        Ok(None)
     }
 }
 
