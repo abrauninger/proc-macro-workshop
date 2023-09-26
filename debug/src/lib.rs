@@ -1,3 +1,4 @@
+use if_chain::if_chain;
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
@@ -56,29 +57,12 @@ impl<'ast> TypeParamVisitor<'ast> {
 
 impl<'ast> Visit<'ast> for TypeParamVisitor<'ast> {
     fn visit_type(&mut self, ty: &'ast Type) {
-        let matched_type = match ty {
-            Path(TypePath { qself: None, path: syn::Path { segments, leading_colon: None } }) => {
-                if segments.len() > 1 {
-                    match segments.first() {
-                        Some(PathSegment { ident, arguments: PathArguments::None }) => {
-                            if self.type_params.iter().find(|type_param| type_param.ident == *ident).is_some() {
-                                Some(ty)
-                            } else {
-                                None
-                            }
-                        },
-                        _ => None,
-                    }
-                } else {
-                    None
-                }
-            },
-            _ => None,
-        };
-
-        match matched_type {
-            Some(ty) => self.related_types.push(ty.clone()),
-            None => {}
+        if_chain! {
+            if let Path(TypePath { qself: None, path: syn::Path { segments, leading_colon: None } }) = ty;
+            if segments.len() > 1;
+            if let Some(PathSegment { ident, arguments: PathArguments::None }) = segments.first();
+            if self.type_params.iter().find(|type_param| type_param.ident == *ident).is_some();
+            then { self.related_types.push(ty.clone()) }
         }
 
         // Delegate to the default impl so that we get type parameters as well.
