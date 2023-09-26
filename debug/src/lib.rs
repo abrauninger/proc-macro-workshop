@@ -74,16 +74,13 @@ impl<'ast> Visit<'ast> for TypeParamVisitor<'ast> {
 pub fn derive(input: TokenStream) -> TokenStream {
     let derive_input = parse_macro_input!(input as DeriveInput);
 
-    match &derive_input {
-        DeriveInput {
-            ident: struct_name,
-            generics,
-            data: Data::Struct(
-                data_struct @ DataStruct {
-                    fields: Fields::Named(FieldsNamed { named: fields, .. }), ..
-                }
-            ), ..
-        } => {
+    if_chain! {
+        if let DeriveInput { ident: struct_name, generics, data, .. } = &derive_input;
+        if let Data::Struct(data_struct) = data;
+        if let DataStruct { fields, .. } = data_struct;
+        if let Fields::Named(fields) = fields;
+        if let FieldsNamed { named: fields, .. } = fields;
+        then {
             let debug_struct_fields: proc_macro2::TokenStream = fields.iter().map(|field| {
                 if let Field { ident: Some(field_name), attrs, .. } = &field {
                     let field_name_string = field_name.to_string();
@@ -151,8 +148,8 @@ pub fn derive(input: TokenStream) -> TokenStream {
                     }
                 }
             })
-        },
-        _ => TokenStream::new(),
+        }
+        else { TokenStream::new() }
     }
 }
 
