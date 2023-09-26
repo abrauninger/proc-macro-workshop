@@ -161,24 +161,19 @@ fn add_trait_bounds(mut generics: Generics, fields: &Punctuated<Field, Comma>) -
             //
             // Only add the trait bound if this type parameter is used outside a PhantomData field.
             let used_outside_phantom_data = fields.iter().find(|&f| {
-                match &f.ty {
-                    Path(TypePath { qself: None, path: syn::Path { segments, leading_colon: None } }) => {
-                        if segments.len() == 1 {
-                            match segments.first() {
-                                Some(PathSegment { ident, arguments: PathArguments::None }) => {
-                                    if *ident == type_param.ident {
-                                        true
-                                    } else {
-                                        false
-                                    }
-                                },
-                                _ => { false },
-                            }
-                        } else {
-                            false
-                        }
-                    },
-                    _ => false,
+                if_chain! {
+                    if let Path(path) = &f.ty;
+                    if let TypePath { qself: None, path } = path;
+                    if let syn::Path { segments, leading_colon: None } = path;
+                    if segments.len() == 1;
+                    if let Some(segment) = segments.first();
+                    if let PathSegment { ident, arguments: PathArguments::None } = segment;
+                    if *ident == type_param.ident;
+                    then {
+                        true
+                    } else {
+                        false
+                    }
                 }
             }).is_some();
 
