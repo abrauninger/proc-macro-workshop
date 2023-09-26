@@ -27,25 +27,38 @@ use syn::{
     visit::{self, Visit}, TypeParam,
 };
 
-fn custom_format_from_debug_attribute(attrs: &Vec<Attribute>) -> syn::Result<Option<String>> {
-    if let [attr] = attrs.as_slice() {
-        if_chain! {
-            if let Attribute { meta, .. } = attr;
-            if let Meta::NameValue(meta) = meta;
-            let MetaNameValue { path, value, .. } = meta;
-            if path.is_ident("debug");
-            if let Expr::Lit(lit) = value;
-            let ExprLit { lit, .. } = lit;
-            if let Lit::Str(lit_str) = lit;
-            then {
-                Ok(Some(lit_str.value()))
+fn custom_format_from_debug_attribute(attr: &Attribute) -> syn::Result<Option<String>> {
+    if_chain! {
+        if let Attribute { meta, .. } = attr;
+        if let Meta::NameValue(meta) = meta;
+        let MetaNameValue { path, value, .. } = meta;
+        if path.is_ident("debug");
+        if let Expr::Lit(lit) = value;
+        let ExprLit { lit, .. } = lit;
+        if let Lit::Str(lit_str) = lit;
+        then {
+            Ok(Some(lit_str.value()))
+        } else {
+            Err(syn::Error::new_spanned(&attr.meta, "expected `debug = \"...\"`"))
+        }
+    }
+}
+
+fn custom_format_from_field_attributes(attrs: &Vec<Attribute>) -> syn::Result<Option<String>> {
+    let mut custom_format: Option<_> = None;
+
+    for attr in attrs {
+        let this_custom_format = custom_format_from_debug_attribute(attr)?;
+        if this_custom_format.is_some() {
+            if custom_format.is_some() {
+                return Err(syn::Error::new_spanned(&attr.meta, "only one 'debug' custom format attribute should be specified"));
             } else {
-                Err(syn::Error::new_spanned(&attr.meta, "expected `debug = \"...\"`"))
+                custom_format = this_custom_format;
             }
         }
-    } else {
-        Ok(None)
     }
+    
+    Ok(custom_format)
 }
 
 // A visitor that enumerates any types that use a certain set of generic type parameters
@@ -93,7 +106,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
                 if let Field { ident: Some(field_name), attrs, .. } = &field {
                     let field_name_string = field_name.to_string();
 
-                    let custom_format = match custom_format_from_debug_attribute(attrs) {
+                    let custom_format = match custom_format_from_field_attributes(attrs) {
                         Ok(custom_format) => custom_format,
                         Err(error) => {
                             return error.to_compile_error().into();
