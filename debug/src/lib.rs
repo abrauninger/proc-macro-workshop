@@ -17,9 +17,13 @@ use syn::{
     MetaNameValue,
     parse_macro_input,
     parse_quote,
+    PathArguments,
+    PathSegment,
     punctuated::Punctuated,
     token::Comma,
-    Type::Path, TypePath, PathSegment, PathArguments,
+    Type::{Path, self},
+    TypePath,
+    visit::{self, Visit}, TypeParam,
 };
 
 fn custom_format_from_debug_attribute(attrs: &Vec<Attribute>) -> syn::Result<Option<String>> {
@@ -35,16 +39,63 @@ fn custom_format_from_debug_attribute(attrs: &Vec<Attribute>) -> syn::Result<Opt
     }
 }
 
+// A visitor that enumerates any types that use a certain set of generic type parameters
+struct TypeParamVisitor<'ast> {
+    type_params: Vec<&'ast TypeParam>,
+    related_types: Vec<Type>,
+}
+
+impl<'ast> TypeParamVisitor<'ast> {
+    fn new(type_params: Vec<&'ast TypeParam>) -> Self {
+        Self {
+            type_params,
+            related_types: Vec::new(),
+        }
+    }
+}
+
+impl<'ast> Visit<'ast> for TypeParamVisitor<'ast> {
+    fn visit_type(&mut self, ty: &'ast Type) {
+        let matched_type = match ty {
+            Path(TypePath { qself: None, path: syn::Path { segments, leading_colon: None } }) => {
+                if segments.len() > 1 {
+                    match segments.first() {
+                        Some(PathSegment { ident, arguments: PathArguments::None }) => {
+                            if self.type_params.iter().find(|type_param| type_param.ident == *ident).is_some() {
+                                Some(ty)
+                            } else {
+                                None
+                            }
+                        },
+                        _ => None,
+                    }
+                } else {
+                    None
+                }
+            },
+            _ => None,
+        };
+
+        match matched_type {
+            Some(ty) => self.related_types.push(ty.clone()),
+            None => {}
+        }
+
+        // Delegate to the default impl so that we get type parameters as well.
+        visit::visit_type(self, ty);
+    }
+}
+
 #[proc_macro_derive(CustomDebug, attributes(debug))]
 pub fn derive(input: TokenStream) -> TokenStream {
     let derive_input = parse_macro_input!(input as DeriveInput);
 
-    match derive_input {
+    match &derive_input {
         DeriveInput {
             ident: struct_name,
             generics,
             data: Data::Struct(
-                DataStruct {
+                data_struct @ DataStruct {
                     fields: Fields::Named(FieldsNamed { named: fields, .. }), ..
                 }
             ), ..
@@ -73,13 +124,42 @@ pub fn derive(input: TokenStream) -> TokenStream {
                 }
             }).collect();
 
+            let struct_type_parameters: Vec<_> = generics.params
+                .iter()
+                .filter_map(|param| {
+                    if let GenericParam::Type(type_param) = param {
+                        Some(type_param)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            let mut type_param_visitor = TypeParamVisitor::new(struct_type_parameters);
+            type_param_visitor.visit_data_struct(&data_struct);
+
+            let associated_type_bounds: Vec<_> = type_param_visitor.related_types
+                .iter()
+                .map(|ty| {
+                    quote!(#ty : Debug)
+                })
+                .collect();
+
+            let where_clauses =
+                if associated_type_bounds.len() > 0 {
+                    quote!(where #(#associated_type_bounds)*)
+                } else {
+                    quote!()
+                };
+
             let struct_name_string = struct_name.to_string();
 
-            let generics = add_trait_bounds(generics, &fields);
+            let generics = add_trait_bounds(generics.clone(), &fields);
             let (impl_generics, struct_generics, _) = generics.split_for_impl();
 
             TokenStream::from(quote! {
-                impl #impl_generics std::fmt::Debug for #struct_name #struct_generics {
+                impl #impl_generics std::fmt::Debug for #struct_name #struct_generics
+                    #where_clauses {
                     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                         fmt.debug_struct(#struct_name_string)
                             #debug_struct_fields
