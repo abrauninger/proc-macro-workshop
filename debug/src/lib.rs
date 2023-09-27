@@ -1,5 +1,6 @@
 use if_chain::if_chain;
 use proc_macro::TokenStream;
+use proc_macro2::Ident;
 use quote::quote;
 use syn::{
     Attribute,
@@ -24,9 +25,30 @@ use syn::{
     token::Comma,
     Type::{Path, self},
     TypePath,
-    visit::{self, Visit}, TypeParam,
+    visit::{self, Visit}, TypeParam, MetaList, parse::{ParseStream, Parse}, Token, LitStr,
 };
 
+struct CustomBound {
+    bound: String,
+}
+
+impl Parse for CustomBound {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let bound_ident: Ident = input.parse()?;
+        if bound_ident != "bound" {
+            return Err(input.error("expected 'bound'"));
+        }
+
+        let _: Token![=] = input.parse()?;
+
+        let bound: LitStr = input.parse()?;
+
+        Ok(CustomBound { bound: bound.value() })
+    }
+}
+
+// Parses an attribute such as:
+// #[debug = "0b{:08b}"]
 fn custom_format_from_debug_attribute(attr: &Attribute) -> syn::Result<Option<String>> {
     if_chain! {
         if let Attribute { meta, .. } = attr;
@@ -40,6 +62,26 @@ fn custom_format_from_debug_attribute(attr: &Attribute) -> syn::Result<Option<St
             Ok(Some(lit_str.value()))
         } else {
             Err(syn::Error::new_spanned(&attr.meta, "expected `debug = \"...\"`"))
+        }
+    }
+}
+
+// Parses an attribute such as:
+// #[debug(bound = "T::Value: Debug")]
+fn custom_bound_from_debug_attribute(attr: &Attribute) -> syn::Result<Option<String>> {
+    if_chain! {
+        if let Attribute { meta, .. } = attr;
+        if let Meta::List(meta) = meta;
+        let MetaList { path, tokens, .. } = meta;
+        if path.is_ident("debug");
+        then {
+            match syn::parse2::<CustomBound>(tokens.clone()) {
+                Ok(custom_bound) => Ok(Some(custom_bound.bound)),
+                Err(_) => Err(syn::Error::new_spanned(&attr.meta, "expected `debug(bound = \"...\")`")),
+            }
+        } else {
+            // Unlike field attributes, we may see attributes here that are unrelated to this macro
+            Ok(None)
         }
     }
 }
@@ -59,6 +101,23 @@ fn custom_format_from_field_attributes(attrs: &Vec<Attribute>) -> syn::Result<Op
     }
     
     Ok(custom_format)
+}
+
+fn custom_bounds_from_struct_attributes(attrs: &Vec<Attribute>) -> syn::Result<Option<String>> {
+    let mut custom_bound: Option<_> = None;
+
+    for attr in attrs {
+        let this_custom_bound = custom_bound_from_debug_attribute(attr)?;
+        if this_custom_bound.is_some() {
+            if custom_bound.is_some() {
+                return Err(syn::Error::new_spanned(&attr.meta, "only one 'debug' custom bound attribute should be specified"));
+            } else {
+                custom_bound = this_custom_bound;
+            }
+        }
+    }
+    
+    Ok(custom_bound)
 }
 
 // A visitor that enumerates any types that use a certain set of generic type parameters
@@ -96,7 +155,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
     let derive_input = parse_macro_input!(input as DeriveInput);
 
     if_chain! {
-        if let DeriveInput { ident: struct_name, generics, data, .. } = &derive_input;
+        if let DeriveInput { ident: struct_name, generics, data, attrs, .. } = &derive_input;
         if let Data::Struct(data_struct) = data;
         if let DataStruct { fields, .. } = data_struct;
         if let Fields::Named(fields) = fields;
@@ -140,12 +199,23 @@ pub fn derive(input: TokenStream) -> TokenStream {
             let mut type_param_visitor = TypeParamVisitor::new(struct_type_parameters);
             type_param_visitor.visit_data_struct(&data_struct);
 
-            let associated_type_bounds: Vec<_> = type_param_visitor.related_types
+            let mut associated_type_bounds: Vec<_> = type_param_visitor.related_types
                 .iter()
                 .map(|ty| {
                     quote!(#ty : Debug)
                 })
                 .collect();
+
+            let custom_bound = match custom_bounds_from_struct_attributes(attrs) {
+                Ok(custom_bound) => custom_bound,
+                Err(error) => {
+                    return error.to_compile_error().into();
+                }
+            };
+
+            if let Some(custom_bound) = custom_bound {
+                associated_type_bounds.push(custom_bound.parse().unwrap());
+            }
 
             let where_clauses =
                 if associated_type_bounds.len() > 0 {
