@@ -1,5 +1,5 @@
 use proc_macro::TokenStream;
-use quote::quote;
+use proc_macro2::Span;
 use syn::{
     parse_macro_input,
     Item::{self, Enum},
@@ -10,12 +10,16 @@ pub fn sorted(_args: TokenStream, input: TokenStream) -> TokenStream {
     let input_clone = input.clone();
     let item: Item = parse_macro_input!(input_clone);
 
+    match sorted_impl(input, item) {
+        Ok(output) => output,
+        Err(err) => err.to_compile_error().into()
+    }
+}
+
+fn sorted_impl(input: TokenStream, item: Item) -> syn::Result<TokenStream> {
     if let Enum(_) = item {
-        input
+        Ok(input)
     } else {
-        quote! {
-            // We emit 'compile_error' directly so that the span is the proc-macro usage site itself
-            compile_error!("expected enum or match expression");
-        }.into()
+        Err(syn::Error::new(Span::call_site(), "expected enum or match expression"))
     }
 }
