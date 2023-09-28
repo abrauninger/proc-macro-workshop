@@ -109,6 +109,8 @@ impl VisitMut for CheckVisitor {
                 }
 
                 previous_arm_path = Some(path);
+            } else {
+                self.add_error(syn::Error::new_spanned(&arm.pat, "unsupported by #[sorted]"));
             }
         }
 
