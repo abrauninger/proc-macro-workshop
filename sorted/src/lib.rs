@@ -10,7 +10,7 @@ use syn::{
     ItemFn,
     Meta,
     Path,
-    visit_mut::{self, VisitMut}, Arm, parse_macro_input,
+    visit_mut::{self, VisitMut}, Arm, parse_macro_input, parse_quote, Pat,
 };
 
 #[proc_macro_attribute]
@@ -81,18 +81,23 @@ impl CheckVisitor {
 
 impl VisitMut for CheckVisitor {
     fn visit_expr_match_mut(self: &mut Self, expr_match: &mut ExprMatch) {
-        let mut previous_arm_path: Option<&Path> = None;
+        let mut previous_arm_path: Option<Path> = None;
+        let mut wildcard_pat: Option<&Pat> = None;
 
         for arm in &expr_match.arms {
+            if let Some(wildcard_pat) = &wildcard_pat {
+                self.add_error(syn::Error::new_spanned(wildcard_pat, "wildcard pattern should be last"));
+            }
+
             if let Some(path) = path_from_match_arm(arm) {
                 if let Some(previous_arm_path) = previous_arm_path {
-                    if compare_paths(path, previous_arm_path) == Ordering::Less {
-                        let sort_before_arm_path: &Path = expr_match.arms
+                    if compare_paths(&path, &previous_arm_path) == Ordering::Less {
+                        let sort_before_arm_path: Path = expr_match.arms
                             .iter()
                             .map(path_from_match_arm)
                             .find(|possible_sort_before_path| {
                                 if let Some(possible_sort_before_path) = possible_sort_before_path {
-                                    if compare_paths(possible_sort_before_path, path) == Ordering::Greater {
+                                    if compare_paths(possible_sort_before_path, &path) == Ordering::Greater {
                                         true
                                     } else {
                                         false
@@ -110,7 +115,11 @@ impl VisitMut for CheckVisitor {
 
                 previous_arm_path = Some(path);
             } else {
-                self.add_error(syn::Error::new_spanned(&arm.pat, "unsupported by #[sorted]"));
+                if let Pat::Wild(_) = &arm.pat {
+                    wildcard_pat = Some(&arm.pat);
+                } else {
+                    self.add_error(syn::Error::new_spanned(&arm.pat, "unsupported by #[sorted]"));
+                }
             }
         }
 
@@ -131,9 +140,15 @@ impl VisitMut for CheckVisitor {
     }
 }
 
-fn path_from_match_arm(arm: &Arm) -> Option<&Path> {
+fn path_from_match_arm(arm: &Arm) -> Option<Path> {
     match &arm.pat {
-        syn::Pat::TupleStruct(tuple_struct) => Some(&tuple_struct.path),
+        Pat::Ident(ident) => {
+            let path: Path = parse_quote!(#ident);
+            Some(path)
+        },
+        Pat::TupleStruct(tuple_struct) => Some(tuple_struct.path.clone()),
+        Pat::Path(expr_path) => Some(expr_path.path.clone()),
+        Pat::Struct(pat_struct) => Some(pat_struct.path.clone()),
         _ => None,
     }
 }
