@@ -114,12 +114,10 @@ impl VisitMut for CheckVisitor {
                 }
 
                 previous_arm_path = Some(path);
+            } else if let Pat::Wild(_) = &arm.pat {
+                wildcard_pat = Some(&arm.pat);
             } else {
-                if let Pat::Wild(_) = &arm.pat {
-                    wildcard_pat = Some(&arm.pat);
-                } else {
-                    self.add_error(syn::Error::new_spanned(&arm.pat, "unsupported by #[sorted]"));
-                }
+                self.add_error(syn::Error::new_spanned(&arm.pat, "unsupported by #[sorted]"));
             }
         }
 
