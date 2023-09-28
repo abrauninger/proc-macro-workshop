@@ -1,7 +1,16 @@
+use std::cmp::Ordering;
+
 use proc_macro::TokenStream;
 use proc_macro2::Span;
+use quote::{quote, ToTokens};
 use syn::{
-    Item::{self, Enum}, Ident,
+    ExprMatch,
+    Ident,
+    Item::{self, Enum},
+    ItemFn,
+    Meta,
+    Path,
+    visit_mut::{self, VisitMut}, Arm, parse_macro_input,
 };
 
 #[proc_macro_attribute]
@@ -21,7 +30,7 @@ fn sorted_impl(input: TokenStream) -> syn::Result<TokenStream> {
         for variant in &item_enum.variants {
             if let Some(previous_variant_ident) = previous_variant_ident {
                 if variant.ident < *previous_variant_ident {
-                    let sort_before_variant = item_enum.variants.iter().find(|v| { v.ident > variant.ident }).unwrap();
+                    let sort_before_variant = item_enum.variants.iter().find(|v| v.ident > variant.ident).unwrap();
                     return Err(syn::Error::new_spanned(&variant.ident, format!("{} should sort before {}", variant.ident, sort_before_variant.ident)));
                 }
             }
@@ -32,5 +41,107 @@ fn sorted_impl(input: TokenStream) -> syn::Result<TokenStream> {
         Ok(input)
     } else {
         Err(syn::Error::new(Span::call_site(), "expected enum or match expression"))
+    }
+}
+
+#[proc_macro_attribute]
+pub fn check(_args: TokenStream, input: TokenStream) -> TokenStream {
+    let mut item = parse_macro_input!(input as ItemFn);
+
+    let mut check_visitor = CheckVisitor::new();
+    check_visitor.visit_item_fn_mut(&mut item);
+
+    let error_tokens = match check_visitor.error {
+        Some(error) => error.to_compile_error(),
+        None => proc_macro2::TokenStream::new(),
+    };
+
+    quote! {
+        #item
+        #error_tokens
+    }.into()
+}
+
+struct CheckVisitor {
+    error: Option<syn::Error>,
+}
+
+impl CheckVisitor {
+    fn new() -> Self {
+        Self { error: None }
+    }
+
+    fn add_error(&mut self, error: syn::Error) {
+        match &mut self.error {
+            Some(existing_error) => existing_error.combine(error),
+            None => self.error = Some(error),
+        }
+    }
+}
+
+impl VisitMut for CheckVisitor {
+    fn visit_expr_match_mut(self: &mut Self, expr_match: &mut ExprMatch) {
+        let mut previous_arm_path: Option<&Path> = None;
+
+        for arm in &expr_match.arms {
+            if let Some(path) = path_from_match_arm(arm) {
+                if let Some(previous_arm_path) = previous_arm_path {
+                    if compare_paths(path, previous_arm_path) == Ordering::Less {
+                        let sort_before_arm_path = expr_match.arms
+                            .iter()
+                            .map(path_from_match_arm)
+                            .find(|possible_sort_before_path| {
+                                if let Some(possible_sort_before_path) = possible_sort_before_path {
+                                    if compare_paths(possible_sort_before_path, path) == Ordering::Greater {
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                } else {
+                                    false
+                                }
+                            }).unwrap();
+
+                        self.add_error(syn::Error::new_spanned(&path, format!("{} should sort before {}", path.to_token_stream(), sort_before_arm_path.to_token_stream())));
+                    }
+                }
+
+                previous_arm_path = Some(path);
+            }
+        }
+
+        // Remove the #[sorted] attribute (which would otherwise cause a compile error)
+        expr_match.attrs.retain(|attr| {
+            if let Meta::Path(path) = &attr.meta {
+                if path.is_ident("sorted") {
+                    false
+                } else {
+                    true
+                }
+            } else {
+                true
+            }
+        });
+
+        visit_mut::visit_expr_match_mut(self, expr_match)
+    }
+}
+
+fn path_from_match_arm(arm: &Arm) -> Option<&Path> {
+    match &arm.pat {
+        syn::Pat::TupleStruct(tuple_struct) => Some(&tuple_struct.path),
+        _ => None,
+    }
+}
+
+fn compare_paths(a: &Path, b: &Path) -> Ordering {
+    if a.segments.len() > 0 && b.segments.len() > 0 {
+        let a_first = a.segments.first().unwrap();
+        let b_first = b.segments.first().unwrap();
+
+        a_first.ident.cmp(&b_first.ident)
+    } else {
+        // Not going to see any paths with zero length
+        Ordering::Equal
     }
 }
