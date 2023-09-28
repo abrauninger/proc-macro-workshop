@@ -2,6 +2,8 @@
 // correctly generates an error when the input enum is out of order, but this
 // time it is using an enum that also has data associated with each variant.
 
+#![allow(unused_imports)]
+
 use sorted::sorted;
 
 use std::env::VarError;

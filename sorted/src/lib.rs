@@ -22,7 +22,7 @@ fn sorted_impl(input: TokenStream) -> syn::Result<TokenStream> {
             if let Some(previous_variant_ident) = previous_variant_ident {
                 if variant.ident < *previous_variant_ident {
                     let sort_before_variant = item_enum.variants.iter().find(|v| { v.ident > variant.ident }).unwrap();
-                    return Err(syn::Error::new_spanned(variant, format!("{} should sort before {}", variant.ident, sort_before_variant.ident)));
+                    return Err(syn::Error::new_spanned(&variant.ident, format!("{} should sort before {}", variant.ident, sort_before_variant.ident)));
                 }
             }
 
