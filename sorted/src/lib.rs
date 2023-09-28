@@ -135,13 +135,24 @@ fn path_from_match_arm(arm: &Arm) -> Option<&Path> {
 }
 
 fn compare_paths(a: &Path, b: &Path) -> Ordering {
-    if a.segments.len() > 0 && b.segments.len() > 0 {
-        let a_first = a.segments.first().unwrap();
-        let b_first = b.segments.first().unwrap();
+    let mut a_iter = a.segments.iter();
+    let mut b_iter = b.segments.iter();
 
-        a_first.ident.cmp(&b_first.ident)
-    } else {
-        // Not going to see any paths with zero length
-        Ordering::Equal
+    loop {
+        let a_segment = a_iter.next();
+        let b_segment = b_iter.next();
+
+        match (a_segment, b_segment) {
+            (Some(a), Some(b)) => {
+                match a.ident.cmp(&b.ident) {
+                    Ordering::Greater => return Ordering::Greater,
+                    Ordering::Less => return Ordering::Less,
+                    _ => ()
+                }
+            },
+            (Some(_), None) => return Ordering::Greater,
+            (None, Some(_)) => return Ordering::Less,
+            (None, None) => return Ordering::Equal,
+        }
     }
 }
