@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 
 use proc_macro::TokenStream;
 use proc_macro2::Span;
-use quote::{quote, ToTokens};
+use quote::quote;
 use syn::{
     ExprMatch,
     Ident,
@@ -87,7 +87,7 @@ impl VisitMut for CheckVisitor {
             if let Some(path) = path_from_match_arm(arm) {
                 if let Some(previous_arm_path) = previous_arm_path {
                     if compare_paths(path, previous_arm_path) == Ordering::Less {
-                        let sort_before_arm_path = expr_match.arms
+                        let sort_before_arm_path: &Path = expr_match.arms
                             .iter()
                             .map(path_from_match_arm)
                             .find(|possible_sort_before_path| {
@@ -100,9 +100,11 @@ impl VisitMut for CheckVisitor {
                                 } else {
                                     false
                                 }
-                            }).unwrap();
+                            })
+                            .unwrap()
+                            .unwrap();
 
-                        self.add_error(syn::Error::new_spanned(&path, format!("{} should sort before {}", path.to_token_stream(), sort_before_arm_path.to_token_stream())));
+                        self.add_error(syn::Error::new_spanned(&path, format!("{} should sort before {}", path_to_string(&path), path_to_string(&sort_before_arm_path))));
                     }
                 }
 
@@ -155,4 +157,12 @@ fn compare_paths(a: &Path, b: &Path) -> Ordering {
             (None, None) => return Ordering::Equal,
         }
     }
+}
+
+fn path_to_string(path: &Path) -> String {
+    path.segments
+        .iter()
+        .map(|s| s.ident.to_string())
+        .collect::<Vec<_>>()
+        .join("::")
 }
