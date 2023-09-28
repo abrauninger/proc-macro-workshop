@@ -160,9 +160,22 @@ fn compare_paths(a: &Path, b: &Path) -> Ordering {
 }
 
 fn path_to_string(path: &Path) -> String {
-    path.segments
-        .iter()
-        .map(|s| s.ident.to_string())
-        .collect::<Vec<_>>()
-        .join("::")
+    let mut output = String::new();
+
+    if let Some(_) = path.leading_colon {
+        output.push_str("::");
+    }
+
+    let mut add_colon = false;
+
+    for segment in &path.segments {
+        if add_colon {
+            output.push_str("::");
+        }
+        add_colon = true;
+
+        output.push_str(&segment.ident.to_string());
+    }
+
+    output
 }
