@@ -1,15 +1,44 @@
+use if_chain::if_chain;
 use proc_macro::TokenStream;
 use quote::{quote, format_ident};
 use syn::{
-    parse::{Parse, ParseStream}, LitInt, Token
+    Item::{self, Struct},
+    parse::{Parse, ParseStream}, LitInt, Token, ItemStruct, Fields, FieldsNamed, Field,
 };
 
 #[proc_macro_attribute]
-pub fn bitfield(args: TokenStream, input: TokenStream) -> TokenStream {
-    let _ = args;
-    let _ = input;
+pub fn bitfield(_args: TokenStream, input: TokenStream) -> TokenStream {
+    match bitfield_impl(input) {
+        Ok(output) => output,
+        Err(err) => err.to_compile_error().into()
+    }
+}
 
-    unimplemented!()
+fn bitfield_impl(input: TokenStream) -> syn::Result<TokenStream> {
+    let item: Item = syn::parse(input.clone())?;
+
+    if_chain! {
+        if let Struct(item_struct) = item;
+        let ItemStruct { attrs, vis, struct_token, ident, generics, fields, semi_token } = item_struct;
+        if let Fields::Named(fields) = fields;
+        if let FieldsNamed { named: fields, .. } = fields;
+        then {
+            let bit_widths: proc_macro2::TokenStream = fields.iter().map(|field| {
+                let Field { ty, .. } = field;
+                quote! { + <#ty as ::bitfield::Specifier>::BITS }
+            }).collect();
+
+            Ok(quote! {
+                #(#attrs)*
+                #vis #struct_token #ident #generics {
+                    data: [u8; (0 #bit_widths) / 8]
+                }
+                #semi_token
+            }.into())
+        } else {
+            Ok(input)
+        }
+    }
 }
 
 #[proc_macro]
@@ -34,7 +63,7 @@ fn gen_bit_width_types_impl(input: TokenStream) -> syn::Result<TokenStream> {
             pub enum #type_name {}
 
             impl Specifier for #type_name {
-                const BITS: u16 = #bit_width;
+                const BITS: usize = #bit_width;
             }
         });
     }
@@ -45,17 +74,17 @@ fn gen_bit_width_types_impl(input: TokenStream) -> syn::Result<TokenStream> {
 }
 
 struct GenBitWidthTypesInput {
-    start: u16,
-    end: u16,
+    start: usize,
+    end: usize,
 }
 
 impl Parse for GenBitWidthTypesInput {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let start = input.parse::<LitInt>()?.base10_parse::<u16>()?;
+        let start = input.parse::<LitInt>()?.base10_parse::<usize>()?;
 
         let _: Token![..=] = input.parse()?;
 
-        let end = input.parse::<LitInt>()?.base10_parse::<u16>()?;
+        let end = input.parse::<LitInt>()?.base10_parse::<usize>()?;
 
         if end < start {
             return Err(input.error("'end' must be greater than or equal to 'start'"));

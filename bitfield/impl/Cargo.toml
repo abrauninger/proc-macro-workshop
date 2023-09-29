@@ -8,6 +8,7 @@ publish = false
 proc-macro = true
 
 [dependencies]
+if_chain = "1.0.2"
+proc-macro2 = "1.0.67"
 quote = "1.0.33"
-syn = "2.0.37"
-# TODO
+syn = { version = "2.0.37", features = ["full"] }

@@ -14,7 +14,7 @@ pub use bitfield_impl::bitfield;
 use bitfield_impl::gen_bit_width_types;
 
 pub trait Specifier {
-    const BITS: u16;
+    const BITS: usize;
 }
 
 gen_bit_width_types!(1..=64);
