@@ -28,12 +28,39 @@ fn bitfield_impl(input: TokenStream) -> syn::Result<TokenStream> {
                 quote! { + <#ty as ::bitfield::Specifier>::BITS }
             }).collect();
 
+            let accessors: proc_macro2::TokenStream = fields.iter().map(|field| {
+                let Field { ident, .. } = field;
+                if let Some(ident) = ident {
+                    let getter_name = format_ident!("get_{}", ident);
+                    let setter_name = format_ident!("set_{}", ident);
+
+                    quote! {
+                        fn #getter_name(&self) -> u64 {
+                            0
+                        }
+
+                        fn #setter_name(&mut self, _val: u64) {
+                        }
+                    }
+                } else {
+                    quote! {}
+                }
+            }).collect();
+
             Ok(quote! {
                 #(#attrs)*
                 #vis #struct_token #ident #generics {
                     data: [u8; (0 #bit_widths) / 8]
                 }
                 #semi_token
+
+                impl #ident {
+                    fn new() -> Self {
+                        Self { data: [0; (0 #bit_widths) / 8] }
+                    }
+
+                    #accessors
+                }
             }.into())
         } else {
             Ok(input)
