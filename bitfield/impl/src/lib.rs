@@ -28,15 +28,34 @@ fn bitfield_impl(input: TokenStream) -> syn::Result<TokenStream> {
                 quote! { + <#ty as ::bitfield::Specifier>::BITS }
             }).collect();
 
-            let accessors: proc_macro2::TokenStream = fields.iter().map(|field| {
-                let Field { ident, .. } = field;
+            let accessors: proc_macro2::TokenStream = fields.iter().enumerate().map(|(field_index, field)| {
+                let Field { ident, ty, .. } = field;
                 if let Some(ident) = ident {
+                    let previous_bit_widths: proc_macro2::TokenStream = fields
+                        .iter()
+                        .enumerate()
+                        .filter(|(previous_field_index, _)| {
+                            previous_field_index < &field_index
+                        })
+                        .map(|(_, previous_field)| {
+                            let Field { ty, .. } = previous_field;
+                            quote! { + <#ty as ::bitfield::Specifier>::BITS }
+                        }).collect();
+
+                    let current_field_size = quote!(<#ty as ::bitfield::Specifier>::BITS / 8);
+
                     let getter_name = format_ident!("get_{}", ident);
                     let setter_name = format_ident!("set_{}", ident);
 
                     quote! {
                         fn #getter_name(&self) -> u64 {
-                            0
+                            // Currently all fields are u64
+                            let mut field_data: [u8; 8] = [0; 8];
+
+                            let previous_fields_size = (0 #previous_bit_widths) / 8;
+                            let source_data = &self.data[previous_fields_size .. previous_fields_size + #current_field_size];
+                            field_data[..#current_field_size].copy_from_slice(source_data);
+                            u64::from_le_bytes(field_data)
                         }
 
                         fn #setter_name(&mut self, _val: u64) {
