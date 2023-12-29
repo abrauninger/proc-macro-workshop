@@ -53,12 +53,19 @@ fn bitfield_impl(input: TokenStream) -> syn::Result<TokenStream> {
                             let mut field_data: [u8; 8] = [0; 8];
 
                             let previous_fields_size = (0 #previous_bit_widths) / 8;
-                            let source_data = &self.data[previous_fields_size .. previous_fields_size + #current_field_size];
-                            field_data[..#current_field_size].copy_from_slice(source_data);
+                            let current_field_size = #current_field_size;
+                            let source_data = &self.data[previous_fields_size .. previous_fields_size + current_field_size];
+                            field_data[..current_field_size].copy_from_slice(source_data);
                             u64::from_le_bytes(field_data)
                         }
 
-                        fn #setter_name(&mut self, _val: u64) {
+                        fn #setter_name(&mut self, val: u64) {
+                            let field_data = val.to_le_bytes();
+
+                            let previous_fields_size = (0 #previous_bit_widths) / 8;
+                            let current_field_size = #current_field_size;
+                            let source_data = &mut self.data[previous_fields_size .. previous_fields_size + current_field_size];
+                            source_data.copy_from_slice(&field_data[..current_field_size]);
                         }
                     }
                 } else {
