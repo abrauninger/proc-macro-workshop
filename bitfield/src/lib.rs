@@ -38,9 +38,9 @@ pub fn get_field_data<const FIELD_DATA_BYTE_COUNT: usize>(source_data: &[u8], bi
 
     let mut field_data: [u8; FIELD_DATA_BYTE_COUNT] = [0; FIELD_DATA_BYTE_COUNT];
 
-    let bit_start_index_within_each_byte = bit_start_index % 8;
-
     if byte_count > 1 {
+        let bit_start_index_within_each_byte = bit_start_index % 8;
+
         let current_byte_shift_left_bit_count = bit_start_index_within_each_byte;
         let trailing_byte_shift_right_bit_count = 8 - bit_start_index_within_each_byte;
 
@@ -54,7 +54,7 @@ pub fn get_field_data<const FIELD_DATA_BYTE_COUNT: usize>(source_data: &[u8], bi
             if byte_index >= FIELD_DATA_BYTE_COUNT {
                 break;
             }
-            
+
             let mut field_data_byte: u8 =
                 if byte_index + 1 < byte_count {
                     (source_data_byte & current_byte_mask) << current_byte_shift_left_bit_count
@@ -72,6 +72,15 @@ pub fn get_field_data<const FIELD_DATA_BYTE_COUNT: usize>(source_data: &[u8], bi
         }
     } else /*byte_count == 1*/ {
         assert!(byte_count == 1);
+
+        let mask_unshifted: usize = (1 << bit_count) - 1;
+        let mask_usize: usize = mask_unshifted << (7 - bit_start_index);
+        let mask: u8 = mask_usize.try_into().unwrap();
+
+        let masked_byte = source_data[0] & mask;
+        let field_data_byte = masked_byte >> (7 - bit_start_index);
+
+        field_data[0] = field_data_byte;
     }
 
     field_data
@@ -79,7 +88,6 @@ pub fn get_field_data<const FIELD_DATA_BYTE_COUNT: usize>(source_data: &[u8], bi
 
 #[test]
 fn test() {
+    assert_eq!(get_field_data::<1>(&[0b10110001], 0 /*bit_start_index*/, 1 /*bit_count*/), [0b00000001]);
     assert_eq!(get_field_data::<1>(&[0b10110001, 0b11100101], 5 /*bit_start_index*/, 6 /*bit_count*/), [0b00111100]);
-
-    //assert_eq!(get_field_data::<1>(&[0b10110001], 0 /*bit_start_index*/, 1 /*bit_count*/), [0b00000001]);
 }
