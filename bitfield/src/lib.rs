@@ -28,7 +28,7 @@ pub fn get_field_data<const FIELD_DATA_BYTE_COUNT: usize>(source_data: &[u8], bi
     let bit_end_index_exclusive = bit_start_index + bit_count;
 
     let byte_start_index = bit_start_index / 8;
-    let byte_end_index_exclusive = bit_end_index_exclusive / 8 + 1;
+    let byte_end_index_exclusive = (bit_end_index_exclusive + 7) / 8;
 
     assert!(byte_start_index < byte_end_index_exclusive);
 
@@ -50,27 +50,16 @@ pub fn get_field_data<const FIELD_DATA_BYTE_COUNT: usize>(source_data: &[u8], bi
         let current_byte_mask: u8 = current_byte_mask_usize.try_into().unwrap();
         let trailing_byte_mask: u8 = trailing_byte_mask_usize.try_into().unwrap();
 
-        for (byte_index, source_data_byte) in field_source_data.iter().enumerate() {
-            if byte_index >= FIELD_DATA_BYTE_COUNT {
-                break;
-            }
+        for (byte_index, _) in [0..byte_count-1].iter().enumerate() {
+            let leading_part_of_current_byte: u8 = (field_source_data[byte_index] & current_byte_mask) << current_byte_shift_left_bit_count;
 
-            let mut field_data_byte: u8 =
-                if byte_index + 1 < byte_count {
-                    (source_data_byte & current_byte_mask) << current_byte_shift_left_bit_count
-                } else {
-                    0
-                };
+            let trailing_part_of_next_byte: u8 = field_source_data[byte_index + 1] & trailing_byte_mask;
 
-            if byte_index + 1 < source_data.len() {
-                // OR in the trailing part of the next byte
-                let trailing_part_of_next_byte: u8 = source_data[byte_index + 1] & trailing_byte_mask;
-                field_data_byte = field_data_byte | (trailing_part_of_next_byte >> trailing_byte_shift_right_bit_count);
-            }
+            let field_data_byte = leading_part_of_current_byte | (trailing_part_of_next_byte >> trailing_byte_shift_right_bit_count);
 
             field_data[byte_index] = field_data_byte;
         }
-    } else /*byte_count == 1*/ {
+    } else {
         assert!(byte_count == 1);
 
         let mask_unshifted: usize = (1 << bit_count) - 1;
@@ -88,6 +77,16 @@ pub fn get_field_data<const FIELD_DATA_BYTE_COUNT: usize>(source_data: &[u8], bi
 
 #[test]
 fn test() {
+    // byte_count == 1
     assert_eq!(get_field_data::<1>(&[0b10110001], 0 /*bit_start_index*/, 1 /*bit_count*/), [0b00000001]);
+    assert_eq!(get_field_data::<1>(&[0b10110001], 1 /*bit_start_index*/, 1 /*bit_count*/), [0b00000000]);
+    assert_eq!(get_field_data::<1>(&[0b10110001], 2 /*bit_start_index*/, 1 /*bit_count*/), [0b00000001]);
+    assert_eq!(get_field_data::<1>(&[0b10110001], 3 /*bit_start_index*/, 1 /*bit_count*/), [0b00000001]);
+    assert_eq!(get_field_data::<1>(&[0b10110001], 4 /*bit_start_index*/, 1 /*bit_count*/), [0b00000000]);
+    assert_eq!(get_field_data::<1>(&[0b10110001], 5 /*bit_start_index*/, 1 /*bit_count*/), [0b00000000]);
+    assert_eq!(get_field_data::<1>(&[0b10110001], 6 /*bit_start_index*/, 1 /*bit_count*/), [0b00000000]);
+    assert_eq!(get_field_data::<1>(&[0b10110001], 7 /*bit_start_index*/, 1 /*bit_count*/), [0b00000001]);
+    
+    // byte_count > 1
     assert_eq!(get_field_data::<1>(&[0b10110001, 0b11100101], 5 /*bit_start_index*/, 6 /*bit_count*/), [0b00111100]);
 }
