@@ -42,30 +42,68 @@ fn bitfield_impl(input: TokenStream) -> syn::Result<TokenStream> {
                             quote! { + <#ty as ::bitfield::Specifier>::BITS }
                         }).collect();
 
-                    let current_field_size = quote!(<#ty as ::bitfield::Specifier>::BITS / 8);
+                    let current_field_bit_count = quote!(<#ty as ::bitfield::Specifier>::BITS);
 
                     let getter_name = format_ident!("get_{}", ident);
                     let setter_name = format_ident!("set_{}", ident);
 
                     quote! {
                         fn #getter_name(&self) -> u64 {
+                            let current_field_bit_start_index = 0 #previous_bit_widths;
+                            let current_field_bit_count = #current_field_bit_count;
+
+                            if (current_field_bit_count > 64) {
+                                panic!("Unable to get a field value that is wider than 64 bits.");
+                            }
+
+                            let current_field_bit_end_index_exclusive = current_field_bit_start_index + current_field_bit_count;
+
+                            let current_field_byte_start_index = current_field_bit_start_index / 8;
+                            let current_field_byte_end_index_exclusive = (current_field_bit_end_index_exclusive + 7) / 8;
+
+                            if current_field_byte_end_index_exclusive <= current_field_byte_start_index {
+                                panic!("Unexpected");
+                            }
+
+                            let source_data = &self.data[current_field_byte_start_index .. current_field_byte_end_index_exclusive];
+
                             // Currently all fields are u64
                             let mut field_data: [u8; 8] = [0; 8];
 
-                            let previous_fields_size = (0 #previous_bit_widths) / 8;
-                            let current_field_size = #current_field_size;
-                            let source_data = &self.data[previous_fields_size .. previous_fields_size + current_field_size];
-                            field_data[..current_field_size].copy_from_slice(source_data);
-                            u64::from_le_bytes(field_data)
+                            let bit_start_index_within_each_byte = current_field_bit_start_index % 8;
+
+                            let second_part_shift_left_bit_count = bit_start_index_within_each_byte;
+                            let first_part_shift_right_bit_count = 8 - bit_start_index_within_each_byte;
+
+                            let first_part_mask = 2 ^ bit_start_index_within_each_byte - 1;
+                            let second_part_mask = (2 ^ (8 - bit_start_index_within_each_byte) - 1) >> second_part_shift_left_bit_count;
+
+                            for (byte_index, source_data_byte) in source_data.iter().enumerate() {
+                                if bit_start_index_within_each_byte == 0 {
+                                    let masked_byte: u8 = source_data_byte & second_part_mask;
+                                    field_data[byte_index] = masked_byte;
+                                } else {
+                                    let mut field_data_byte: u8 = (source_data_byte & second_part_mask) << second_part_shift_left_bit_count;
+
+                                    if byte_index + 1 < source_data.len() {
+                                        // OR in the first part of the next byte
+                                        let first_part_of_next_byte: u8 = source_data[byte_index + 1] & first_part_mask;
+                                        field_data_byte = field_data_byte | (first_part_of_next_byte >> first_part_shift_right_bit_count);
+                                    }
+
+                                    field_data[byte_index] = field_data_byte;
+                                }
+                            }
                         }
 
                         fn #setter_name(&mut self, val: u64) {
-                            let field_data = val.to_le_bytes();
+                            // let field_data = val.to_le_bytes();
 
-                            let previous_fields_size = (0 #previous_bit_widths) / 8;
-                            let current_field_size = #current_field_size;
-                            let source_data = &mut self.data[previous_fields_size .. previous_fields_size + current_field_size];
-                            source_data.copy_from_slice(&field_data[..current_field_size]);
+                            // let previous_fields_bits = 0 #previous_bit_widths;
+                            // let current_field_bits = #current_field_bits;
+                            // let source_data = &mut self.data[previous_fields_size .. previous_fields_size + current_field_size];
+                            // source_data.copy_from_slice(&field_data[..current_field_size]);
+                            todo!();
                         }
                     }
                 } else {
