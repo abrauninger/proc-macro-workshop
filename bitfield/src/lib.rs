@@ -29,8 +29,24 @@ fn create_bit_mask(bit_start_index: usize, bit_count: usize) -> u8 {
     assert!(bit_start_index < 8);
     assert!(bit_start_index + bit_count <= 8);
 
-    let mask_usize: usize = ((1 << bit_count) - 1) << (8 - bit_start_index);
+    let mask_usize: usize = ((1 << bit_count) - 1) << (8 - bit_start_index - bit_count);
     mask_usize.try_into().unwrap()
+}
+
+fn enumerate_bytes<const FIELD_DATA_BYTE_COUNT: usize>(
+    field_data: &mut [u8; FIELD_DATA_BYTE_COUNT],
+    source_byte_count: usize,
+    callback: impl Fn(usize) -> u8) {
+    for (field_data_byte_index, _) in [0 .. FIELD_DATA_BYTE_COUNT].iter().enumerate() {
+        let field_data_byte =
+            if field_data_byte_index >= source_byte_count {
+                0
+            } else {
+                callback(field_data_byte_index)
+            };
+
+        field_data[field_data_byte_index] = field_data_byte;
+    }
 }
 
 pub fn get_field_data<const FIELD_DATA_BYTE_COUNT: usize>(source_data: &[u8], bit_start_index: usize, bit_count: usize) -> [u8; FIELD_DATA_BYTE_COUNT] {
@@ -44,6 +60,9 @@ pub fn get_field_data<const FIELD_DATA_BYTE_COUNT: usize>(source_data: &[u8], bi
     let byte_end_index_inclusive = bit_end_index_inclusive / 8;
     let byte_end_index_exclusive = byte_end_index_inclusive + 1;
 
+    let bit_start_index_within_byte = bit_start_index % 8;
+    let bit_end_index_exclusive_within_byte = (bit_end_index_inclusive % 8) + 1;
+
     let source_byte_count = byte_end_index_exclusive - byte_start_index;
 
     // We'll read from a slice of 'source_data' such that the Nth byte in 'source_data'
@@ -52,110 +71,91 @@ pub fn get_field_data<const FIELD_DATA_BYTE_COUNT: usize>(source_data: &[u8], bi
     // byte of 'source_data'.
     let field_source_data = &source_data[byte_start_index ..= byte_end_index_inclusive];
 
-    let get_field_byte =
-        if (bit_start_index % 8) == 0 && (bit_end_index_exclusive % 8) == 0 {
-            // The field data is aligned on byte boundaries, so we can use a simple approach
-            // without masking or shifting.
+    let mut field_data: [u8; FIELD_DATA_BYTE_COUNT] = [0; FIELD_DATA_BYTE_COUNT];
+
+    if (bit_start_index % 8) == 0 && (bit_end_index_exclusive % 8) == 0 {
+        // The field data is aligned on byte boundaries, so we can use a simple approach
+        // without masking or shifting.
+        enumerate_bytes(
+            &mut field_data,
+            source_byte_count,
             |field_data_byte_index: usize| -> u8 {
                 field_source_data[field_data_byte_index]
-            }
-        } else if byte_start_index == byte_end_index_inclusive {
-            // The field data is entirely contained within a single byte
-            let mask = create_bit_mask(bit_start_index, bit_count);
-            let shift_right_bit_count = 8 - bit_end_index_exclusive;
+            });
+    } else if byte_start_index == byte_end_index_inclusive {
+        // The field data is entirely contained within a single byte
+        let mask = create_bit_mask(bit_start_index_within_byte, bit_count);
+        let shift_right_bit_count = 8 - bit_end_index_exclusive_within_byte;
 
+        enumerate_bytes(
+            &mut field_data,
+            source_byte_count,
             |field_data_byte_index: usize| -> u8 {
                 assert!(field_data_byte_index == 0);
                 (field_source_data[field_data_byte_index] & mask) >> shift_right_bit_count
-            }
-        } else {
-            // The field data spans multiple bytes, and the start or end of the data are not
-            // aligned on byte boundaries.
-            // Use the most complicated approach with different masking and shifting for the first,
-            // middle, and last bytes.
-            let bit_start_index_within_first_byte = bit_start_index % 8;
-            let bit_end_index_exclusive_within_last_byte = bit_end_index_exclusive % 8;
+            });
+    } else {
+        // The field data spans multiple bytes, and the start or end of the data are not
+        // aligned on byte boundaries.
+        // Use the most complicated approach with different masking and shifting for the first,
+        // middle, and last bytes.
+        //
+        // Each source_data byte is divided into a left part and a right part.
+        //
+        // The bit_end_index determines most of our shifting and masking behavior.
+        // We want to end up with data where the right-most bit of the field is aligned
+        // with the right-most bit of the last byte of the resulting data.
 
-            // Each source_data byte is divided into a left part and a right part.
-            // The boundary between the left and right parts is determined by bit_start_index.
-            //
-            // The bit_end_index determines most of our shifting and masking behavior.
-            // We want to end up with data where the right-most bit of the field is aligned
-            // with the right-most bit of the last byte of the resulting data.
+        let middle_byte_left_part_bit_count = bit_end_index_exclusive_within_byte;
+        let middle_byte_right_part_bit_count = 8 - bit_end_index_exclusive_within_byte;
 
-            let middle_byte_left_part_bit_count = bit_start_index_within_first_byte;
-            let middle_byte_right_part_bit_count = 8 - bit_start_index_within_first_byte;
+        let middle_byte_left_part_mask = create_bit_mask(0, middle_byte_left_part_bit_count);
+        let middle_byte_right_part_mask = create_bit_mask(middle_byte_left_part_bit_count, middle_byte_right_part_bit_count);
 
-            let middle_byte_left_part_mask = create_bit_mask(0, middle_byte_left_part_bit_count);
-            let middle_byte_right_part_mask = create_bit_mask(middle_byte_left_part_bit_count, middle_byte_right_part_bit_count);
+        // For bytes in the middle, the left part of each middle byte is treated as the right-most
+        // (trailing) part of the resulting data byte, so it is shifted right by N bits.
+        let middle_byte_left_part_shift_right_bit_count = 8 - middle_byte_left_part_bit_count;
 
-            // For bytes in the middle, the left part of each middle byte is treated as the right-most
-            // (trailing) part of the resulting data byte, so it is shifted right by N bits.
-            let middle_byte_left_part_shift_right_bit_count = 8 - bit_end_index_exclusive_within_last_byte;
+        // For bytes in the middle, the right part of each middle byte is treated as the left-most
+        // (leading) part of the resulting data byte, so it is shifted left by N bits.
+        let middle_byte_right_part_shift_left_bit_count = 8 - middle_byte_right_part_bit_count;
 
-            // For bytes in the middle, the right part of each middle byte is treated as the left-most
-            // (leading) part of the resulting data byte, so it is shifted left by N bits.
-            let middle_byte_right_part_shift_left_bit_count = bit_end_index_exclusive_within_last_byte;
+        // The first byte is treated just like the right part of a middle byte, but with a different mask.
+        let first_byte_right_part_bit_count = 8 - bit_start_index_within_byte;
+        let first_byte_right_part_mask = create_bit_mask(bit_start_index_within_byte, first_byte_right_part_bit_count);
 
-            // The first byte is treated just like the right part of a middle byte, but with a different mask.
-            let first_byte_bit_count = 8 - bit_start_index_within_first_byte;
-            let first_byte_right_part_mask = create_bit_mask(bit_start_index_within_first_byte, first_byte_bit_count);
+        let first_byte_right_part_shift_left_bit_count = middle_byte_right_part_shift_left_bit_count;
 
-            let first_byte_right_part_shift_left_bit_count = middle_byte_right_part_shift_left_bit_count;
-
-            // The last byte is treated just like the left part of a middle byte, with the same mask and everything.
-            let last_byte_left_part_bit_count = middle_byte_left_part_bit_count;
-            let last_byte_left_part_mask = middle_byte_left_part_mask;
-            let last_byte_left_part_shift_right_bit_count = middle_byte_right_part_shift_left_bit_count;
-            
+        enumerate_bytes(
+            &mut field_data,
+            source_byte_count,
             |field_data_byte_index: usize| -> u8 {
                 let mut field_data_byte: u8 = 0;
 
                 let current_source_byte = field_source_data[field_data_byte_index];
 
-                if field_data_byte_index + 1 < source_byte_count - 1 {
-                    // For all bytes but the last byte, extract the right portion of the byte and shift it left.
-                    let (mask, shift_left_bit_count) =
-                        if field_data_byte_index == 0 {
-                            // The first byte
-                            (first_byte_right_part_mask, first_byte_right_part_shift_left_bit_count)
-                        } else {
-                            (middle_byte_right_part_mask, middle_byte_right_part_shift_left_bit_count)
-                        };
+                // Extract the right portion of the current source byte and shift it left.
+                let (mask, shift_left_bit_count) =
+                    if field_data_byte_index == 0 {
+                        // The first byte
+                        (first_byte_right_part_mask, first_byte_right_part_shift_left_bit_count)
+                    } else {
+                        (middle_byte_right_part_mask, middle_byte_right_part_shift_left_bit_count)
+                    };
 
-                    let extracted_data = (current_source_byte & mask) << shift_left_bit_count;
-                    field_data_byte = field_data_byte | extracted_data;
-                }
+                let extracted_data = (current_source_byte & mask) << shift_left_bit_count;
+                field_data_byte = field_data_byte | extracted_data;
 
-                if field_data_byte_index > 0 {
-                    // For all bytes but the first byte, extract the left portion of the byte and shift it right.
-                    let (mask, shift_right_bit_count) =
-                        if field_data_byte_index + 1 == source_byte_count - 1 {
-                            // The last byte
-                            (last_byte_left_part_mask, last_byte_left_part_shift_right_bit_count)
-                        } else {
-                            (middle_byte_left_part_mask, middle_byte_left_part_shift_right_bit_count)
-                        };
+                if field_data_byte_index + 1 < source_byte_count {
+                    // For all bytes but the last byte, extract the left portion of the next byte and shift it right.
+                    let next_source_byte = field_source_data[field_data_byte_index + 1];
 
-                    let extracted_data = (current_source_byte & mask) >> shift_right_bit_count;
+                    let extracted_data = (next_source_byte & middle_byte_left_part_mask) >> middle_byte_left_part_shift_right_bit_count;
                     field_data_byte = field_data_byte | extracted_data;
                 }
 
                 field_data_byte
-            }
-        };
-
-    let mut field_data: [u8; FIELD_DATA_BYTE_COUNT] = [0; FIELD_DATA_BYTE_COUNT];
-
-    for (field_data_byte_index, _) in [0 .. FIELD_DATA_BYTE_COUNT].iter().enumerate() {
-        let field_data_byte =
-            if field_data_byte_index >= source_byte_count {
-                0
-            } else {
-                get_field_byte(field_data_byte_index)
-            };
-
-        field_data[field_data_byte_index] = field_data_byte;
+            });
     }
 
     field_data
@@ -191,5 +191,5 @@ fn test() {
     assert_eq!(get_field_data::<1>(&[0b10110001, 0b11100101], 14 /*bit_start_index*/, 2 /*bit_count*/), [0b00000001]);
     
     // byte_count > 1
-    assert_eq!(get_field_data::<1>(&[0b10110001, 0b11100101], 5 /*bit_start_index*/, 6 /*bit_count*/), [0b00111100]);
+    assert_eq!(get_field_data::<1>(&[0b10110001, 0b11100101], 5 /*bit_start_index*/, 6 /*bit_count*/), [0b00001111]);
 }
