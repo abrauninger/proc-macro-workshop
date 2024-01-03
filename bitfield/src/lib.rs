@@ -19,37 +19,13 @@ pub trait Specifier {
 
 gen_bit_width_types!(1..=64);
 
-struct MaskAndShiftRight {
-    mask: u8,
-    shift_right_bit_count: u8,
-}
-
-struct MaskAndShiftLeft {
-    mask: u8,
-    shift_left_bit_count: u8,
-}
-
-struct MiddleByteMaskAndShift {
-    left_part: MaskAndShiftRight,
-    right_part: MaskAndShiftLeft,
-}
-
-struct MultiByteMaskAndShift {
-    first_byte: MaskAndShiftLeft,
-    middle_byte: MiddleByteMaskAndShift,
-    last_byte: MaskAndShiftRight,
-}
-
-enum DataAccessMethod {
-    NoMaskingOrShifting,
-    MaskAndShiftSingleByte(MaskAndShiftRight),
-    MaskAndShiftMultipleBytes(MultiByteMaskAndShift),
-}
+// Helper functions
+// TODO: Move these to a detail module?
 
 /// Returns a byte consisting of 1's in the bits [bit_start_index .. bit_start_index + bit_count],
 /// and 0's otherwise.
 /// Note that the leftmost bit is the 0th bit index.
-fn create_bit_mask(bit_start_index: u8, bit_count: u8) -> u8 {
+fn create_bit_mask(bit_start_index: usize, bit_count: usize) -> u8 {
     assert!(bit_start_index < 8);
     assert!(bit_start_index + bit_count <= 8);
 
@@ -57,67 +33,6 @@ fn create_bit_mask(bit_start_index: u8, bit_count: u8) -> u8 {
     mask_usize.try_into().unwrap()
 }
 
-fn get_data_access_method(bit_start_index: usize, bit_count: usize) -> DataAccessMethod {
-    assert!(bit_count > 0);
-
-    let bit_end_index_exclusive = bit_start_index + bit_count;
-    let bit_end_index_inclusive = bit_end_index_exclusive - 1;
-
-    let byte_start_index = bit_start_index / 8;
-    let byte_end_index_inclusive = bit_end_index_inclusive / 8;
-
-    if (bit_start_index % 8) == 0 && (bit_end_index_exclusive % 8) == 0 {
-        DataAccessMethod::NoMaskingOrShifting
-    } else if byte_start_index == byte_end_index_inclusive {
-        let mask = create_bit_mask(bit_start_index, bit_count);
-        let shift_right_bit_count = 8 - bit_end_index_exclusive;
-
-        DataAccessMethod::SingleByte(MaskAndShiftRight { mask, shift_right_bit_count })
-    } else {
-        let bit_start_index_within_first_byte = bit_start_index % 8;
-        let bit_end_index_exclusive_within_last_byte = bit_end_index_exclusive % 8;
-
-        // Each source_data byte is divided into a left part and a right part.
-        // The boundary between the left and right parts is determined by bit_start_index.
-        let middle_byte_left_part_bit_count = bit_start_index_within_first_byte;
-        let middle_byte_right_part_bit_count = 8 - bit_start_index_within_first_byte;
-
-        // The bit_end_index determines most of our shifting and masking behavior.
-        // We want to end up with data where the right-most bit of the field is aligned
-        // with the right-most bit of the last byte of the resulting data.
-
-        // For bytes in the middle, the right part of each middle byte is treated as the left-most
-        // (leading) part of the resulting data byte, so it is shifted left by N bits.
-        let middle_byte_right_part_shift_left_bit_count = bit_end_index_exclusive_within_last_byte;
-
-        // For bytes in the middle, the left part of each middle byte is treated as the right-most
-        // (trailing) part of the resulting data byte, so it is shifted right by N bits.
-        let middle_byte_left_part_shift_right_bit_count = 8 - bit_end_index_exclusive_within_last_byte;
-
-        let middle_byte_left_part_mask = create_bit_mask(, bit_count)
-
-
-        let middle_byte_left_part_mask_usize = ((1 << middle_byte_left_part_bit_count) - 1) << middle_byte_right_part_shift_left_bit_count;
-        let middle_byte_right_part_mask_usize = (1 << middle_byte_right_part_bit_count) - 1;
-
-        let middle_byte_left_part_mask: u8 = middle_byte_left_part_mask_usize.try_into().unwrap();
-        let middle_byte_right_part_mask: u8 = middle_byte_right_part_mask_usize.try_into().unwrap();
-
-        // The first byte is treated just like the right part of a middle byte, but with a different mask.
-        let first_byte_right_part_shift_left_bit_count = middle_byte_right_part_shift_left_bit_count;
-
-        let first_byte_bit_count = 8 - bit_start_index_within_first_byte;
-        let first_byte_right_part_mask_usize = (1 << first_byte_bit_count) - 1;
-        let first_byte_right_part_mask: u8 = first_byte_right_part_mask_usize.try_into().unwrap();
-
-        // The last byte is treated just like the left part of a middle byte, with the same mask and everything.
-        let last_byte_left_part_shift_right_bit_count = middle_byte_right_part_shift_left_bit_count;
-        let last_byte_left_part_mask = middle_byte_left_part_mask;
-    };
-}
-
-// Helper functions
-// TODO: Move these to a detail module?
 pub fn get_field_data<const FIELD_DATA_BYTE_COUNT: usize>(source_data: &[u8], bit_start_index: usize, bit_count: usize) -> [u8; FIELD_DATA_BYTE_COUNT] {
     assert!(bit_count > 0);
     assert!(bit_count < FIELD_DATA_BYTE_COUNT * 8, "Unable to get a field value that is wider than {} bits.", FIELD_DATA_BYTE_COUNT * 8);
@@ -127,6 +42,7 @@ pub fn get_field_data<const FIELD_DATA_BYTE_COUNT: usize>(source_data: &[u8], bi
 
     let byte_start_index = bit_start_index / 8;
     let byte_end_index_inclusive = bit_end_index_inclusive / 8;
+    let byte_end_index_exclusive = byte_end_index_inclusive + 1;
 
     let source_byte_count = byte_end_index_exclusive - byte_start_index;
 
@@ -136,66 +52,71 @@ pub fn get_field_data<const FIELD_DATA_BYTE_COUNT: usize>(source_data: &[u8], bi
     // byte of 'source_data'.
     let field_source_data = &source_data[byte_start_index ..= byte_end_index_inclusive];
 
-    let mut field_data: [u8; FIELD_DATA_BYTE_COUNT] = [0; FIELD_DATA_BYTE_COUNT];
+    let get_field_byte =
+        if (bit_start_index % 8) == 0 && (bit_end_index_exclusive % 8) == 0 {
+            // The field data is aligned on byte boundaries, so we can use a simple approach
+            // without masking or shifting.
+            |field_data_byte_index: usize| -> u8 {
+                field_source_data[field_data_byte_index]
+            }
+        } else if byte_start_index == byte_end_index_inclusive {
+            // The field data is entirely contained within a single byte
+            let mask = create_bit_mask(bit_start_index, bit_count);
+            let shift_right_bit_count = 8 - bit_end_index_exclusive;
 
-    match access_algorithm {
-        DataAccessAlgorithm::SingleByte => {
-            let mask_unshifted: usize = (1 << bit_count) - 1;
-            let mask_usize: usize = mask_unshifted << (8 - bit_start_index - bit_count);
-            let mask: u8 = mask_usize.try_into().unwrap();
-
-            let masked_byte = source_data[0] & mask;
-            let field_data_byte = masked_byte >> (8 - bit_start_index - bit_count);
-
-            field_data[0] = field_data_byte;
-        },
-        _ => {
+            |field_data_byte_index: usize| -> u8 {
+                assert!(field_data_byte_index == 0);
+                (field_source_data[field_data_byte_index] & mask) >> shift_right_bit_count
+            }
+        } else {
+            // The field data spans multiple bytes, and the start or end of the data are not
+            // aligned on byte boundaries.
+            // Use the most complicated approach with different masking and shifting for the first,
+            // middle, and last bytes.
             let bit_start_index_within_first_byte = bit_start_index % 8;
             let bit_end_index_exclusive_within_last_byte = bit_end_index_exclusive % 8;
 
             // Each source_data byte is divided into a left part and a right part.
             // The boundary between the left and right parts is determined by bit_start_index.
-            let middle_byte_left_part_bit_count = bit_start_index_within_first_byte;
-            let middle_byte_right_part_bit_count = 8 - bit_start_index_within_first_byte;
-
+            //
             // The bit_end_index determines most of our shifting and masking behavior.
             // We want to end up with data where the right-most bit of the field is aligned
             // with the right-most bit of the last byte of the resulting data.
 
-            // For bytes in the middle, the right part of each middle byte is treated as the left-most
-            // (leading) part of the resulting data byte, so it is shifted left by N bits.
-            let middle_byte_right_part_shift_left_bit_count = bit_end_index_exclusive_within_last_byte;
+            let middle_byte_left_part_bit_count = bit_start_index_within_first_byte;
+            let middle_byte_right_part_bit_count = 8 - bit_start_index_within_first_byte;
+
+            let middle_byte_left_part_mask = create_bit_mask(0, middle_byte_left_part_bit_count);
+            let middle_byte_right_part_mask = create_bit_mask(middle_byte_left_part_bit_count, middle_byte_right_part_bit_count);
 
             // For bytes in the middle, the left part of each middle byte is treated as the right-most
             // (trailing) part of the resulting data byte, so it is shifted right by N bits.
             let middle_byte_left_part_shift_right_bit_count = 8 - bit_end_index_exclusive_within_last_byte;
 
-            let middle_byte_left_part_mask_usize = ((1 << middle_byte_left_part_bit_count) - 1) << middle_byte_right_part_shift_left_bit_count;
-            let middle_byte_right_part_mask_usize = (1 << middle_byte_right_part_bit_count) - 1;
-
-            let middle_byte_left_part_mask: u8 = middle_byte_left_part_mask_usize.try_into().unwrap();
-            let middle_byte_right_part_mask: u8 = middle_byte_right_part_mask_usize.try_into().unwrap();
+            // For bytes in the middle, the right part of each middle byte is treated as the left-most
+            // (leading) part of the resulting data byte, so it is shifted left by N bits.
+            let middle_byte_right_part_shift_left_bit_count = bit_end_index_exclusive_within_last_byte;
 
             // The first byte is treated just like the right part of a middle byte, but with a different mask.
+            let first_byte_bit_count = 8 - bit_start_index_within_first_byte;
+            let first_byte_right_part_mask = create_bit_mask(bit_start_index_within_first_byte, first_byte_bit_count);
+
             let first_byte_right_part_shift_left_bit_count = middle_byte_right_part_shift_left_bit_count;
 
-            let first_byte_bit_count = 8 - bit_start_index_within_first_byte;
-            let first_byte_right_part_mask_usize = (1 << first_byte_bit_count) - 1;
-            let first_byte_right_part_mask: u8 = first_byte_right_part_mask_usize.try_into().unwrap();
-
             // The last byte is treated just like the left part of a middle byte, with the same mask and everything.
-            let last_byte_left_part_shift_right_bit_count = middle_byte_right_part_shift_left_bit_count;
+            let last_byte_left_part_bit_count = middle_byte_left_part_bit_count;
             let last_byte_left_part_mask = middle_byte_left_part_mask;
-
-            for (byte_index, _) in [0 .. source_byte_count].iter().enumerate() {
+            let last_byte_left_part_shift_right_bit_count = middle_byte_right_part_shift_left_bit_count;
+            
+            |field_data_byte_index: usize| -> u8 {
                 let mut field_data_byte: u8 = 0;
 
-                let current_source_byte = field_source_data[byte_index];
+                let current_source_byte = field_source_data[field_data_byte_index];
 
-                if byte_index + 1 < byte_count - 1 {
+                if field_data_byte_index + 1 < source_byte_count - 1 {
                     // For all bytes but the last byte, extract the right portion of the byte and shift it left.
                     let (mask, shift_left_bit_count) =
-                        if byte_index == 0 {
+                        if field_data_byte_index == 0 {
                             // The first byte
                             (first_byte_right_part_mask, first_byte_right_part_shift_left_bit_count)
                         } else {
@@ -206,10 +127,10 @@ pub fn get_field_data<const FIELD_DATA_BYTE_COUNT: usize>(source_data: &[u8], bi
                     field_data_byte = field_data_byte | extracted_data;
                 }
 
-                if access_algorithm == DatAccessAlgorithm::byte_index > 0 {
+                if field_data_byte_index > 0 {
                     // For all bytes but the first byte, extract the left portion of the byte and shift it right.
                     let (mask, shift_right_bit_count) =
-                        if byte_index + 1 == byte_count - 1 {
+                        if field_data_byte_index + 1 == source_byte_count - 1 {
                             // The last byte
                             (last_byte_left_part_mask, last_byte_left_part_shift_right_bit_count)
                         } else {
@@ -220,9 +141,21 @@ pub fn get_field_data<const FIELD_DATA_BYTE_COUNT: usize>(source_data: &[u8], bi
                     field_data_byte = field_data_byte | extracted_data;
                 }
 
-                field_data[byte_index] = field_data_byte;
+                field_data_byte
             }
-        }
+        };
+
+    let mut field_data: [u8; FIELD_DATA_BYTE_COUNT] = [0; FIELD_DATA_BYTE_COUNT];
+
+    for (field_data_byte_index, _) in [0 .. FIELD_DATA_BYTE_COUNT].iter().enumerate() {
+        let field_data_byte =
+            if field_data_byte_index >= source_byte_count {
+                0
+            } else {
+                get_field_byte(field_data_byte_index)
+            };
+
+        field_data[field_data_byte_index] = field_data_byte;
     }
 
     field_data
