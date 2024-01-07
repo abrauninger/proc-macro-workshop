@@ -203,4 +203,9 @@ fn test() {
     // Similar to previous, but not *quite* byte-boundary-aligned
     assert_eq!(get_field_data::<3>(&[0b10110001, 0b11100101, 0b00101110], 1 /*bit_start_index*/, 23 /*bit_count*/), [0b00110001, 0b11100101, 0b00101110]);
     assert_eq!(get_field_data::<3>(&[0b10110001, 0b11100101, 0b00101110], 0 /*bit_start_index*/, 23 /*bit_count*/), [0b01011000, 0b11110010, 0b10010111]);
+
+    // Similar to previous, but using a larger field_data array than is needed
+    assert_eq!(get_field_data::<5>(&[0b10110001, 0b11100101, 0b00101110], 1 /*bit_start_index*/, 23 /*bit_count*/), [0b00110001, 0b11100101, 0b00101110, 0, 0]);
+    assert_eq!(get_field_data::<5>(&[0b10110001, 0b11100101, 0b00101110], 0 /*bit_start_index*/, 23 /*bit_count*/), [0b01011000, 0b11110010, 0b10010111, 0, 0]);
+
 }
