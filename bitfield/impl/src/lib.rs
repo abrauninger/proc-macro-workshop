@@ -56,44 +56,9 @@ fn bitfield_impl(input: TokenStream) -> syn::Result<TokenStream> {
                                 panic!("Unable to get a field value that is wider than 64 bits.");
                             }
 
-                            let current_field_bit_end_index_exclusive = current_field_bit_start_index + current_field_bit_count;
-
-                            let current_field_byte_start_index = current_field_bit_start_index / 8;
-                            let current_field_byte_end_index_exclusive = (current_field_bit_end_index_exclusive + 7) / 8;
-
-                            if current_field_byte_end_index_exclusive <= current_field_byte_start_index {
-                                panic!("Unexpected");
-                            }
-
-                            let source_data = &self.data[current_field_byte_start_index .. current_field_byte_end_index_exclusive];
-
                             // Currently all fields are u64
-                            let mut field_data: [u8; 8] = [0; 8];
-
-                            let bit_start_index_within_each_byte = current_field_bit_start_index % 8;
-
-                            let second_part_shift_left_bit_count = bit_start_index_within_each_byte;
-                            let first_part_shift_right_bit_count = 8 - bit_start_index_within_each_byte;
-
-                            let first_part_mask = 2 ^ bit_start_index_within_each_byte - 1;
-                            let second_part_mask = (2 ^ (8 - bit_start_index_within_each_byte) - 1) >> second_part_shift_left_bit_count;
-
-                            for (byte_index, source_data_byte) in source_data.iter().enumerate() {
-                                if bit_start_index_within_each_byte == 0 {
-                                    let masked_byte: u8 = source_data_byte & second_part_mask;
-                                    field_data[byte_index] = masked_byte;
-                                } else {
-                                    let mut field_data_byte: u8 = (source_data_byte & second_part_mask) << second_part_shift_left_bit_count;
-
-                                    if byte_index + 1 < source_data.len() {
-                                        // OR in the first part of the next byte
-                                        let first_part_of_next_byte: u8 = source_data[byte_index + 1] & first_part_mask;
-                                        field_data_byte = field_data_byte | (first_part_of_next_byte >> first_part_shift_right_bit_count);
-                                    }
-
-                                    field_data[byte_index] = field_data_byte;
-                                }
-                            }
+                            let field_data = ::bitfield::get_field_data::<8>(&self.data, current_field_bit_start_index, current_field_bit_count);
+                            u64::from_le_bytes(field_data)
                         }
 
                         fn #setter_name(&mut self, val: u64) {
