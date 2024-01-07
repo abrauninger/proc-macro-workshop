@@ -74,16 +74,7 @@ pub fn get_field_data<const FIELD_DATA_BYTE_COUNT: usize>(source_data: &[u8], bi
 
     let mut field_data: [u8; FIELD_DATA_BYTE_COUNT] = [0; FIELD_DATA_BYTE_COUNT];
 
-    if (bit_start_index % 8) == 0 && (bit_end_index_exclusive % 8) == 0 {
-        // The field data is aligned on byte boundaries, so we can use a simple approach
-        // without masking or shifting.
-        enumerate_bytes::<FIELD_DATA_BYTE_COUNT>(
-            &mut field_data,
-            source_byte_count,
-            |field_data_byte_index: usize| -> u8 {
-                field_source_data[field_data_byte_index]
-            });
-    } else if byte_start_index == byte_end_index_inclusive {
+    if byte_start_index == byte_end_index_inclusive {
         // The field data is entirely contained within a single byte
         let mask = create_bit_mask(bit_start_index_within_byte, bit_count);
         let shift_right_bit_count = 8 - bit_end_index_exclusive_within_byte;
