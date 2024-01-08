@@ -45,24 +45,24 @@ pub fn copy_bits(
     // For now we hard-code destination_bit_start_index to be zero
     assert!(destination_bit_start_index == 0);
 
-    let bit_end_index_exclusive = source_bit_start_index + bit_count;
-    let bit_end_index_inclusive = bit_end_index_exclusive - 1;
+    let source_bit_end_index_exclusive = source_bit_start_index + bit_count;
+    let source_bit_end_index_inclusive = source_bit_end_index_exclusive - 1;
 
-    let byte_start_index = source_bit_start_index / 8;
-    let byte_end_index_inclusive = bit_end_index_inclusive / 8;
-    let byte_end_index_exclusive = byte_end_index_inclusive + 1;
+    let source_byte_start_index = source_bit_start_index / 8;
+    let source_byte_end_index_inclusive = source_bit_end_index_inclusive / 8;
+    let source_byte_end_index_exclusive = source_byte_end_index_inclusive + 1;
 
-    let bit_start_index_within_byte = source_bit_start_index % 8;
-    let bit_end_index_exclusive_within_byte = (bit_end_index_inclusive % 8) + 1;
+    let source_bit_start_index_within_byte = source_bit_start_index % 8;
+    let source_bit_end_index_exclusive_within_byte = (source_bit_end_index_inclusive % 8) + 1;
 
-    let source_byte_count = byte_end_index_exclusive - byte_start_index;
+    let source_byte_count = source_byte_end_index_exclusive - source_byte_start_index;
     assert!(source_byte_count > 0);
 
     // We'll read from a slice of 'source_data' such that the Nth byte in 'source_data'
     // corresponds to the Nth byte in 'field_data'.  But for fields that span multiple
     // source bytes, the Nth byte of 'field_data' will also include some data from the (N+1)st
     // byte of 'source_data'.
-    let field_source_data = &source_data[byte_start_index ..= byte_end_index_inclusive];
+    let field_source_data = &source_data[source_byte_start_index ..= source_byte_end_index_inclusive];
 
     // We'll use little-endian byte ordering (least significant byte first), but within
     // each byte, the most significant bit is first and the least significant bit is last.
@@ -73,27 +73,27 @@ pub fn copy_bits(
     // As an added twist, we want to handle the case where FIELD_DATA_BYTE_COUNT exceeds
     // the number of bytes in the actual field data.  In that case, we should put the remaining
     // unused bytes set to all zero at the *end* of the returned byte array.
-    let actual_field_data_byte_count = (bit_count + 7) / 8;
-    assert!(actual_field_data_byte_count > 0);
+    let destination_byte_count = (bit_count + 7) / 8;
+    assert!(destination_byte_count > 0);
 
     let mut remaining_bit_count = bit_count;
     let mut source_byte_index = source_byte_count - 1;
-    let mut returned_field_data_byte_index = actual_field_data_byte_count - 1;
-    let mut consumed_bit_count_in_current_returned_field_data_byte = 0;
-    let mut returned_field_data_byte: u8 = 0;
+    let mut destination_byte_index = destination_byte_count - 1;
+    let mut consumed_bit_count_in_current_destination_byte = 0;
+    let mut destination_byte: u8 = 0;
 
     loop {
         if remaining_bit_count == 0 {
             break;
         }
 
-        if consumed_bit_count_in_current_returned_field_data_byte == 0 {
+        if consumed_bit_count_in_current_destination_byte == 0 {
             // We haven't populated anything in the current returned_field_data_byte.
 
             let (mask, shift_right_bit_count, chunk_bit_count) =
-                if remaining_bit_count > bit_end_index_exclusive_within_byte {
+                if remaining_bit_count > source_bit_end_index_exclusive_within_byte {
                     // Extract the left part of the current source byte, and shift it right.
-                    let chunk_bit_count = bit_end_index_exclusive_within_byte;
+                    let chunk_bit_count = source_bit_end_index_exclusive_within_byte;
 
                     let mask = create_bit_mask(0, chunk_bit_count);
                     let shift_right_bit_count = 8 - chunk_bit_count;
@@ -103,22 +103,22 @@ pub fn copy_bits(
                     // Extract what remains and shift it right.
                     let chunk_bit_count = remaining_bit_count;
 
-                    let mask = create_bit_mask(bit_start_index_within_byte, chunk_bit_count);
-                    let shift_right_bit_count = 8 - (bit_start_index_within_byte + chunk_bit_count);
+                    let mask = create_bit_mask(source_bit_start_index_within_byte, chunk_bit_count);
+                    let shift_right_bit_count = 8 - (source_bit_start_index_within_byte + chunk_bit_count);
 
                     (mask, shift_right_bit_count, chunk_bit_count)
                 };
 
             let extracted_data = (field_source_data[source_byte_index] & mask) >> shift_right_bit_count;
-            returned_field_data_byte = returned_field_data_byte | extracted_data;
+            destination_byte = destination_byte | extracted_data;
 
-            consumed_bit_count_in_current_returned_field_data_byte = consumed_bit_count_in_current_returned_field_data_byte + chunk_bit_count;
+            consumed_bit_count_in_current_destination_byte = consumed_bit_count_in_current_destination_byte + chunk_bit_count;
             remaining_bit_count = remaining_bit_count - chunk_bit_count;
 
             // This source byte is complete now, but the returned_field_data_byte is still in progress.
             if source_byte_index == 0 {
                 // Done iterating.  Store the returned_field_data_byte that we've created so far.
-                destination_data[returned_field_data_byte_index] = returned_field_data_byte;
+                destination_data[destination_byte_index] = destination_byte;
                 break;
             }
 
@@ -127,42 +127,42 @@ pub fn copy_bits(
             // We have already populated part of the current returned_field_data_byte.
 
             let (mask, shift_left_bit_count, chunk_bit_count) =
-                if bit_end_index_exclusive_within_byte == 8 {
+                if source_bit_end_index_exclusive_within_byte == 8 {
                     // Special case where we know bit_count will be zero.
                     (0, 0, 0)
-                } else if remaining_bit_count >= (8 - bit_end_index_exclusive_within_byte) {
+                } else if remaining_bit_count >= (8 - source_bit_end_index_exclusive_within_byte) {
                     // Extract the right part of the current source byte, and shift it left.
-                    let chunk_bit_count = 8 - bit_end_index_exclusive_within_byte;
+                    let chunk_bit_count = 8 - source_bit_end_index_exclusive_within_byte;
 
-                    let mask = create_bit_mask(bit_end_index_exclusive_within_byte, chunk_bit_count);
-                    let shift_left_bit_count = bit_end_index_exclusive_within_byte;
+                    let mask = create_bit_mask(source_bit_end_index_exclusive_within_byte, chunk_bit_count);
+                    let shift_left_bit_count = source_bit_end_index_exclusive_within_byte;
 
                     (mask, shift_left_bit_count, chunk_bit_count)
                 } else {
                     // Extract what remains and shift it left.
                     let chunk_bit_count = remaining_bit_count;
 
-                    let mask = create_bit_mask(bit_start_index_within_byte, chunk_bit_count);
-                    let shift_left_bit_count = bit_end_index_exclusive_within_byte;
+                    let mask = create_bit_mask(source_bit_start_index_within_byte, chunk_bit_count);
+                    let shift_left_bit_count = source_bit_end_index_exclusive_within_byte;
 
                     (mask, shift_left_bit_count, chunk_bit_count)
                 };
 
             let extracted_data = (field_source_data[source_byte_index] & mask) << shift_left_bit_count;
-            returned_field_data_byte = returned_field_data_byte | extracted_data;
+            destination_byte = destination_byte | extracted_data;
 
-            consumed_bit_count_in_current_returned_field_data_byte = 0;
+            consumed_bit_count_in_current_destination_byte = 0;
             remaining_bit_count = remaining_bit_count - chunk_bit_count;
 
             // This source byte is still in progress, but the returned_field_data_byte is complete.
-            destination_data[returned_field_data_byte_index] = returned_field_data_byte;
-            returned_field_data_byte = 0;
+            destination_data[destination_byte_index] = destination_byte;
+            destination_byte = 0;
 
-            if returned_field_data_byte_index == 0 {
+            if destination_byte_index == 0 {
                 break;
             }
             
-            returned_field_data_byte_index = returned_field_data_byte_index - 1;
+            destination_byte_index = destination_byte_index - 1;
         }
     }
 }
