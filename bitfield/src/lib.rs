@@ -58,11 +58,7 @@ pub fn copy_bits(
     let source_byte_count = source_byte_end_index_exclusive - source_byte_start_index;
     assert!(source_byte_count > 0);
 
-    // We'll read from a slice of 'source_data' such that the Nth byte in 'source_data'
-    // corresponds to the Nth byte in 'field_data'.  But for fields that span multiple
-    // source bytes, the Nth byte of 'field_data' will also include some data from the (N+1)st
-    // byte of 'source_data'.
-    let field_source_data = &source_data[source_byte_start_index ..= source_byte_end_index_inclusive];
+    let destination_byte_start_index = destination_bit_start_index / 8;
 
     // We'll use little-endian byte ordering (least significant byte first), but within
     // each byte, the most significant bit is first and the least significant bit is last.
@@ -77,8 +73,8 @@ pub fn copy_bits(
     assert!(destination_byte_count > 0);
 
     let mut remaining_bit_count = bit_count;
-    let mut source_byte_index = source_byte_count - 1;
-    let mut destination_byte_index = destination_byte_count - 1;
+    let mut source_byte_index = source_byte_start_index + source_byte_count - 1;
+    let mut destination_byte_index = destination_byte_start_index + destination_byte_count - 1;
     let mut consumed_bit_count_in_current_destination_byte = 0;
     let mut destination_byte: u8 = 0;
 
@@ -109,14 +105,14 @@ pub fn copy_bits(
                     (mask, shift_right_bit_count, chunk_bit_count)
                 };
 
-            let extracted_data = (field_source_data[source_byte_index] & mask) >> shift_right_bit_count;
+            let extracted_data = (source_data[source_byte_index] & mask) >> shift_right_bit_count;
             destination_byte = destination_byte | extracted_data;
 
             consumed_bit_count_in_current_destination_byte = consumed_bit_count_in_current_destination_byte + chunk_bit_count;
             remaining_bit_count = remaining_bit_count - chunk_bit_count;
 
             // This source byte is complete now, but the returned_field_data_byte is still in progress.
-            if source_byte_index == 0 {
+            if source_byte_index == source_byte_start_index {
                 // Done iterating.  Store the returned_field_data_byte that we've created so far.
                 destination_data[destination_byte_index] = destination_byte;
                 break;
@@ -148,7 +144,7 @@ pub fn copy_bits(
                     (mask, shift_left_bit_count, chunk_bit_count)
                 };
 
-            let extracted_data = (field_source_data[source_byte_index] & mask) << shift_left_bit_count;
+            let extracted_data = (source_data[source_byte_index] & mask) << shift_left_bit_count;
             destination_byte = destination_byte | extracted_data;
 
             consumed_bit_count_in_current_destination_byte = 0;
@@ -158,7 +154,7 @@ pub fn copy_bits(
             destination_data[destination_byte_index] = destination_byte;
             destination_byte = 0;
 
-            if destination_byte_index == 0 {
+            if destination_byte_index == destination_byte_start_index {
                 break;
             }
             
