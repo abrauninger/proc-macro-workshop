@@ -33,18 +33,26 @@ fn create_bit_mask(bit_start_index: usize, bit_count: usize) -> u8 {
     mask_usize.try_into().unwrap()
 }
 
-pub fn get_field_data<const FIELD_DATA_BYTE_COUNT: usize>(source_data: &[u8], bit_start_index: usize, bit_count: usize) -> [u8; FIELD_DATA_BYTE_COUNT] {
-    assert!(bit_count > 0);
-    assert!(bit_count <= FIELD_DATA_BYTE_COUNT * 8, "Unable to get a field value that is wider than {} bits.", FIELD_DATA_BYTE_COUNT * 8);
+pub fn copy_bits(
+    source_data: &[u8],
+    destination_data: &mut [u8],
+    source_bit_start_index: usize,
+    destination_bit_start_index: usize,
+    bit_count: usize) {
 
-    let bit_end_index_exclusive = bit_start_index + bit_count;
+    assert!(bit_count > 0);
+
+    // For now we hard-code destination_bit_start_index to be zero
+    assert!(destination_bit_start_index == 0);
+
+    let bit_end_index_exclusive = source_bit_start_index + bit_count;
     let bit_end_index_inclusive = bit_end_index_exclusive - 1;
 
-    let byte_start_index = bit_start_index / 8;
+    let byte_start_index = source_bit_start_index / 8;
     let byte_end_index_inclusive = bit_end_index_inclusive / 8;
     let byte_end_index_exclusive = byte_end_index_inclusive + 1;
 
-    let bit_start_index_within_byte = bit_start_index % 8;
+    let bit_start_index_within_byte = source_bit_start_index % 8;
     let bit_end_index_exclusive_within_byte = (bit_end_index_inclusive % 8) + 1;
 
     let source_byte_count = byte_end_index_exclusive - byte_start_index;
@@ -55,8 +63,6 @@ pub fn get_field_data<const FIELD_DATA_BYTE_COUNT: usize>(source_data: &[u8], bi
     // source bytes, the Nth byte of 'field_data' will also include some data from the (N+1)st
     // byte of 'source_data'.
     let field_source_data = &source_data[byte_start_index ..= byte_end_index_inclusive];
-
-    let mut field_data: [u8; FIELD_DATA_BYTE_COUNT] = [0; FIELD_DATA_BYTE_COUNT];
 
     // We'll use little-endian byte ordering (least significant byte first), but within
     // each byte, the most significant bit is first and the least significant bit is last.
@@ -112,7 +118,7 @@ pub fn get_field_data<const FIELD_DATA_BYTE_COUNT: usize>(source_data: &[u8], bi
             // This source byte is complete now, but the returned_field_data_byte is still in progress.
             if source_byte_index == 0 {
                 // Done iterating.  Store the returned_field_data_byte that we've created so far.
-                field_data[returned_field_data_byte_index] = returned_field_data_byte;
+                destination_data[returned_field_data_byte_index] = returned_field_data_byte;
                 break;
             }
 
@@ -149,7 +155,7 @@ pub fn get_field_data<const FIELD_DATA_BYTE_COUNT: usize>(source_data: &[u8], bi
             remaining_bit_count = remaining_bit_count - chunk_bit_count;
 
             // This source byte is still in progress, but the returned_field_data_byte is complete.
-            field_data[returned_field_data_byte_index] = returned_field_data_byte;
+            destination_data[returned_field_data_byte_index] = returned_field_data_byte;
             returned_field_data_byte = 0;
 
             if returned_field_data_byte_index == 0 {
@@ -159,12 +165,23 @@ pub fn get_field_data<const FIELD_DATA_BYTE_COUNT: usize>(source_data: &[u8], bi
             returned_field_data_byte_index = returned_field_data_byte_index - 1;
         }
     }
+}
+
+pub fn get_field_data<const FIELD_DATA_BYTE_COUNT: usize>(source_data: &[u8], bit_start_index: usize, bit_count: usize) -> [u8; FIELD_DATA_BYTE_COUNT] {
+    let mut field_data: [u8; FIELD_DATA_BYTE_COUNT] = [0; FIELD_DATA_BYTE_COUNT];
+
+    copy_bits(
+        &source_data,
+        &mut field_data,
+        bit_start_index /*source_bit_start_index*/,
+        0 /*destination_bit_start_index*/,
+        bit_count);
 
     field_data
 }
 
 #[test]
-fn test() {
+fn test_get_field_data() {
     // bit_count == 1, single byte
     assert_eq!(get_field_data::<1>(&[0b10110001], 0 /*bit_start_index*/, 1 /*bit_count*/), [0b00000001]);
     assert_eq!(get_field_data::<1>(&[0b10110001], 1 /*bit_start_index*/, 1 /*bit_count*/), [0b00000000]);
