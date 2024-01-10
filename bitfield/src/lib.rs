@@ -58,7 +58,18 @@ pub fn copy_bits(
     let source_byte_count = source_byte_end_index_exclusive - source_byte_start_index;
     assert!(source_byte_count > 0);
 
+    let destination_bit_end_index_exclusive = destination_bit_start_index + bit_count;
+    let destination_bit_end_index_inclusive = destination_bit_end_index_exclusive - 1;
+
     let destination_byte_start_index = destination_bit_start_index / 8;
+    let destination_byte_end_index_inclusive = destination_bit_end_index_inclusive / 8;
+    let destination_byte_end_index_exclusive = destination_byte_end_index_inclusive + 1;
+
+    //let source_bit_range = source_bit_start_index .. source_bit_end_index_inclusive;
+    let source_byte_range = source_byte_start_index .. source_byte_end_index_exclusive;
+
+    //let destination_bit_range = destination_bit_start_index .. destination_bit_end_index_exclusive;
+    let destination_byte_range = destination_byte_start_index .. destination_byte_end_index_exclusive;
 
     // We'll use little-endian byte ordering (least significant byte first), but within
     // each byte, the most significant bit is first and the least significant bit is last.
@@ -73,8 +84,8 @@ pub fn copy_bits(
     assert!(destination_byte_count > 0);
 
     let mut remaining_bit_count = bit_count;
-    let mut source_byte_index = source_byte_start_index + source_byte_count - 1;
-    let mut destination_byte_index = destination_byte_start_index + destination_byte_count - 1;
+    let mut source_byte_index = source_byte_range.end - 1;
+    let mut destination_byte_index = destination_byte_range.end - 1;
     let mut consumed_bit_count_in_current_destination_byte = 0;
     let mut destination_byte: u8 = 0;
 
