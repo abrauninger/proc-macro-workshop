@@ -62,13 +62,17 @@ fn bitfield_impl(input: TokenStream) -> syn::Result<TokenStream> {
                         }
 
                         fn #setter_name(&mut self, val: u64) {
-                            // let field_data = val.to_le_bytes();
+                            let current_field_bit_start_index = 0 #previous_bit_widths;
+                            let current_field_bit_count = #current_field_bit_count;
 
-                            // let previous_fields_bits = 0 #previous_bit_widths;
-                            // let current_field_bits = #current_field_bits;
-                            // let source_data = &mut self.data[previous_fields_size .. previous_fields_size + current_field_size];
-                            // source_data.copy_from_slice(&field_data[..current_field_size]);
-                            todo!();
+                            if (current_field_bit_count > 64) {
+                                panic!("Unable to get a field value that is wider than 64 bits.");
+                            }
+
+                            let field_data = val.to_le_bytes();
+
+                            // Currently all fields are u64
+                            ::bitfield::set_field_data::<8>(&mut self.data, field_data, current_field_bit_start_index, current_field_bit_count);
                         }
                     }
                 } else {
