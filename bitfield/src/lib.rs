@@ -77,7 +77,13 @@ pub fn copy_bits(
     }
 }
 
-pub fn get_field_data<const FIELD_DATA_BYTE_COUNT: usize>(source_data: &[u8], bit_start_index: usize, bit_count: usize) -> [u8; FIELD_DATA_BYTE_COUNT] {
+pub fn get_field_data<const FIELD_DATA_BYTE_COUNT: usize>(
+    bitfield_data: &[u8],
+    bit_start_index: usize,
+    bit_count: usize,
+) ->
+    [u8; FIELD_DATA_BYTE_COUNT] {
+
     let mut field_data: [u8; FIELD_DATA_BYTE_COUNT] = [0; FIELD_DATA_BYTE_COUNT];
 
     // We use little-endian byte ordering, so unused bytes in the field data should be at the end
@@ -87,58 +93,105 @@ pub fn get_field_data<const FIELD_DATA_BYTE_COUNT: usize>(source_data: &[u8], bi
     let field_data_bit_start_index = ((FIELD_DATA_BYTE_COUNT * 8) - bit_count) % 8;
 
     copy_bits(
-        &source_data,
+        &bitfield_data,
         &mut field_data,
         bit_start_index /*source_bit_start_index*/,
         field_data_bit_start_index /*destination_bit_start_index*/,
-        bit_count);
+        bit_count,
+    );
 
     field_data
 }
 
-#[test]
-fn test_get_field_data() {
-    // bit_count == 1, single byte
-    assert_eq!(get_field_data::<1>(&[0b10110001], 0 /*bit_start_index*/, 1 /*bit_count*/), [0b00000001]);
-    assert_eq!(get_field_data::<1>(&[0b10110001], 1 /*bit_start_index*/, 1 /*bit_count*/), [0b00000000]);
-    assert_eq!(get_field_data::<1>(&[0b10110001], 2 /*bit_start_index*/, 1 /*bit_count*/), [0b00000001]);
-    assert_eq!(get_field_data::<1>(&[0b10110001], 3 /*bit_start_index*/, 1 /*bit_count*/), [0b00000001]);
-    assert_eq!(get_field_data::<1>(&[0b10110001], 4 /*bit_start_index*/, 1 /*bit_count*/), [0b00000000]);
-    assert_eq!(get_field_data::<1>(&[0b10110001], 5 /*bit_start_index*/, 1 /*bit_count*/), [0b00000000]);
-    assert_eq!(get_field_data::<1>(&[0b10110001], 6 /*bit_start_index*/, 1 /*bit_count*/), [0b00000000]);
-    assert_eq!(get_field_data::<1>(&[0b10110001], 7 /*bit_start_index*/, 1 /*bit_count*/), [0b00000001]);
+pub fn set_field_data<const FIELD_DATA_BYTE_COUNT: usize>(
+    bitfield_data: &mut [u8],
+    field_data: [u8; FIELD_DATA_BYTE_COUNT],
+    bit_start_index: usize,
+    bit_count: usize,
+) {
+    // TODO: De-dupe with get_field_data?
 
-    // bit_count == 2, multiple bytes
-    assert_eq!(get_field_data::<1>(&[0b10110001, 0b11100101], 0 /*bit_start_index*/, 2 /*bit_count*/), [0b00000010]);
-    assert_eq!(get_field_data::<1>(&[0b10110001, 0b11100101], 1 /*bit_start_index*/, 2 /*bit_count*/), [0b00000001]);
-    assert_eq!(get_field_data::<1>(&[0b10110001, 0b11100101], 2 /*bit_start_index*/, 2 /*bit_count*/), [0b00000011]);
-    assert_eq!(get_field_data::<1>(&[0b10110001, 0b11100101], 3 /*bit_start_index*/, 2 /*bit_count*/), [0b00000010]);
-    assert_eq!(get_field_data::<1>(&[0b10110001, 0b11100101], 4 /*bit_start_index*/, 2 /*bit_count*/), [0b00000000]);
-    assert_eq!(get_field_data::<1>(&[0b10110001, 0b11100101], 5 /*bit_start_index*/, 2 /*bit_count*/), [0b00000000]);
-    assert_eq!(get_field_data::<1>(&[0b10110001, 0b11100101], 6 /*bit_start_index*/, 2 /*bit_count*/), [0b00000001]);
-    assert_eq!(get_field_data::<1>(&[0b10110001, 0b11100101], 7 /*bit_start_index*/, 2 /*bit_count*/), [0b00000011]);
-    assert_eq!(get_field_data::<1>(&[0b10110001, 0b11100101], 8 /*bit_start_index*/, 2 /*bit_count*/), [0b00000011]);
-    assert_eq!(get_field_data::<1>(&[0b10110001, 0b11100101], 9 /*bit_start_index*/, 2 /*bit_count*/), [0b00000011]);
-    assert_eq!(get_field_data::<1>(&[0b10110001, 0b11100101], 10 /*bit_start_index*/, 2 /*bit_count*/), [0b00000010]);
-    assert_eq!(get_field_data::<1>(&[0b10110001, 0b11100101], 11 /*bit_start_index*/, 2 /*bit_count*/), [0b00000000]);
-    assert_eq!(get_field_data::<1>(&[0b10110001, 0b11100101], 12 /*bit_start_index*/, 2 /*bit_count*/), [0b00000001]);
-    assert_eq!(get_field_data::<1>(&[0b10110001, 0b11100101], 13 /*bit_start_index*/, 2 /*bit_count*/), [0b00000010]);
-    assert_eq!(get_field_data::<1>(&[0b10110001, 0b11100101], 14 /*bit_start_index*/, 2 /*bit_count*/), [0b00000001]);
-    
-    // bit_count == 6, multiple bytes
-    assert_eq!(get_field_data::<1>(&[0b10110001, 0b11100101], 5 /*bit_start_index*/, 6 /*bit_count*/), [0b00001111]);
+    // We use little-endian byte ordering, so unused bytes in the field data should be at the end
+    // of the field_data array.
+    // We also want the right-most bit of the data to align with the right-most bit of the
+    // last non-empty byte.
+    let field_data_bit_start_index = ((FIELD_DATA_BYTE_COUNT * 8) - bit_count) % 8;
 
-    // Data spanning multiple bytes, aligned on byte boundaries
-    assert_eq!(get_field_data::<3>(&[0b10110001, 0b11100101, 0b00101110], 0 /*bit_start_index*/, 8 /*bit_count*/), [0b10110001, 0, 0]);
-    assert_eq!(get_field_data::<3>(&[0b10110001, 0b11100101, 0b00101110], 0 /*bit_start_index*/, 16 /*bit_count*/), [0b10110001, 0b11100101, 0]);
-    assert_eq!(get_field_data::<3>(&[0b10110001, 0b11100101, 0b00101110], 0 /*bit_start_index*/, 24 /*bit_count*/), [0b10110001, 0b11100101, 0b00101110]);
-
-    // Similar to previous, but not *quite* byte-boundary-aligned
-    assert_eq!(get_field_data::<3>(&[0b10110001, 0b11100101, 0b00101110], 1 /*bit_start_index*/, 23 /*bit_count*/), [0b00110001, 0b11100101, 0b00101110]);
-    assert_eq!(get_field_data::<3>(&[0b10110001, 0b11100101, 0b00101110], 0 /*bit_start_index*/, 23 /*bit_count*/), [0b01011000, 0b11110010, 0b10010111]);
-
-    // Similar to previous, but using a larger field_data array than is needed
-    assert_eq!(get_field_data::<5>(&[0b10110001, 0b11100101, 0b00101110], 1 /*bit_start_index*/, 23 /*bit_count*/), [0b00110001, 0b11100101, 0b00101110, 0, 0]);
-    assert_eq!(get_field_data::<5>(&[0b10110001, 0b11100101, 0b00101110], 0 /*bit_start_index*/, 23 /*bit_count*/), [0b01011000, 0b11110010, 0b10010111, 0, 0]);
-
+    copy_bits(
+        &field_data,
+        bitfield_data,
+        field_data_bit_start_index /*source_bit_start_index*/,
+        bit_start_index /*destination_bit_start_index*/,
+        bit_count,
+    );
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::*;
+    
+    #[test]
+    fn get_field_data_tests() {
+        // bit_count == 1, single byte
+        assert_eq!(get_field_data::<1>(&[0b10110001], 0 /*bit_start_index*/, 1 /*bit_count*/), [0b00000001]);
+        assert_eq!(get_field_data::<1>(&[0b10110001], 1 /*bit_start_index*/, 1 /*bit_count*/), [0b00000000]);
+        assert_eq!(get_field_data::<1>(&[0b10110001], 2 /*bit_start_index*/, 1 /*bit_count*/), [0b00000001]);
+        assert_eq!(get_field_data::<1>(&[0b10110001], 3 /*bit_start_index*/, 1 /*bit_count*/), [0b00000001]);
+        assert_eq!(get_field_data::<1>(&[0b10110001], 4 /*bit_start_index*/, 1 /*bit_count*/), [0b00000000]);
+        assert_eq!(get_field_data::<1>(&[0b10110001], 5 /*bit_start_index*/, 1 /*bit_count*/), [0b00000000]);
+        assert_eq!(get_field_data::<1>(&[0b10110001], 6 /*bit_start_index*/, 1 /*bit_count*/), [0b00000000]);
+        assert_eq!(get_field_data::<1>(&[0b10110001], 7 /*bit_start_index*/, 1 /*bit_count*/), [0b00000001]);
+
+        // bit_count == 2, multiple bytes
+        assert_eq!(get_field_data::<1>(&[0b10110001, 0b11100101], 0 /*bit_start_index*/, 2 /*bit_count*/), [0b00000010]);
+        assert_eq!(get_field_data::<1>(&[0b10110001, 0b11100101], 1 /*bit_start_index*/, 2 /*bit_count*/), [0b00000001]);
+        assert_eq!(get_field_data::<1>(&[0b10110001, 0b11100101], 2 /*bit_start_index*/, 2 /*bit_count*/), [0b00000011]);
+        assert_eq!(get_field_data::<1>(&[0b10110001, 0b11100101], 3 /*bit_start_index*/, 2 /*bit_count*/), [0b00000010]);
+        assert_eq!(get_field_data::<1>(&[0b10110001, 0b11100101], 4 /*bit_start_index*/, 2 /*bit_count*/), [0b00000000]);
+        assert_eq!(get_field_data::<1>(&[0b10110001, 0b11100101], 5 /*bit_start_index*/, 2 /*bit_count*/), [0b00000000]);
+        assert_eq!(get_field_data::<1>(&[0b10110001, 0b11100101], 6 /*bit_start_index*/, 2 /*bit_count*/), [0b00000001]);
+        assert_eq!(get_field_data::<1>(&[0b10110001, 0b11100101], 7 /*bit_start_index*/, 2 /*bit_count*/), [0b00000011]);
+        assert_eq!(get_field_data::<1>(&[0b10110001, 0b11100101], 8 /*bit_start_index*/, 2 /*bit_count*/), [0b00000011]);
+        assert_eq!(get_field_data::<1>(&[0b10110001, 0b11100101], 9 /*bit_start_index*/, 2 /*bit_count*/), [0b00000011]);
+        assert_eq!(get_field_data::<1>(&[0b10110001, 0b11100101], 10 /*bit_start_index*/, 2 /*bit_count*/), [0b00000010]);
+        assert_eq!(get_field_data::<1>(&[0b10110001, 0b11100101], 11 /*bit_start_index*/, 2 /*bit_count*/), [0b00000000]);
+        assert_eq!(get_field_data::<1>(&[0b10110001, 0b11100101], 12 /*bit_start_index*/, 2 /*bit_count*/), [0b00000001]);
+        assert_eq!(get_field_data::<1>(&[0b10110001, 0b11100101], 13 /*bit_start_index*/, 2 /*bit_count*/), [0b00000010]);
+        assert_eq!(get_field_data::<1>(&[0b10110001, 0b11100101], 14 /*bit_start_index*/, 2 /*bit_count*/), [0b00000001]);
+        
+        // bit_count == 6, multiple bytes
+        assert_eq!(get_field_data::<1>(&[0b10110001, 0b11100101], 5 /*bit_start_index*/, 6 /*bit_count*/), [0b00001111]);
+
+        // Data spanning multiple bytes, aligned on byte boundaries
+        assert_eq!(get_field_data::<3>(&[0b10110001, 0b11100101, 0b00101110], 0 /*bit_start_index*/, 8 /*bit_count*/), [0b10110001, 0, 0]);
+        assert_eq!(get_field_data::<3>(&[0b10110001, 0b11100101, 0b00101110], 0 /*bit_start_index*/, 16 /*bit_count*/), [0b10110001, 0b11100101, 0]);
+        assert_eq!(get_field_data::<3>(&[0b10110001, 0b11100101, 0b00101110], 0 /*bit_start_index*/, 24 /*bit_count*/), [0b10110001, 0b11100101, 0b00101110]);
+
+        // Similar to previous, but not *quite* byte-boundary-aligned
+        assert_eq!(get_field_data::<3>(&[0b10110001, 0b11100101, 0b00101110], 1 /*bit_start_index*/, 23 /*bit_count*/), [0b00110001, 0b11100101, 0b00101110]);
+        assert_eq!(get_field_data::<3>(&[0b10110001, 0b11100101, 0b00101110], 0 /*bit_start_index*/, 23 /*bit_count*/), [0b01011000, 0b11110010, 0b10010111]);
+
+        // Similar to previous, but using a larger field_data array than is needed
+        assert_eq!(get_field_data::<5>(&[0b10110001, 0b11100101, 0b00101110], 1 /*bit_start_index*/, 23 /*bit_count*/), [0b00110001, 0b11100101, 0b00101110, 0, 0]);
+        assert_eq!(get_field_data::<5>(&[0b10110001, 0b11100101, 0b00101110], 0 /*bit_start_index*/, 23 /*bit_count*/), [0b01011000, 0b11110010, 0b10010111, 0, 0]);
+    }
+
+    fn test_set_field_data<const BITFIELD_BYTE_COUNT: usize, const FIELD_DATA_BYTE_COUNT: usize>(
+        bitfield_data_before: [u8; BITFIELD_BYTE_COUNT],
+        field_data: [u8; FIELD_DATA_BYTE_COUNT],
+        bit_start_index: usize,
+        bit_count: usize,
+        expected_bitfield_data_after: [u8; BITFIELD_BYTE_COUNT]
+    ) {
+        let mut bitfield_data = bitfield_data_before;
+
+        set_field_data::<FIELD_DATA_BYTE_COUNT>(&mut bitfield_data, field_data, bit_start_index, bit_count);
+        assert_eq!(&bitfield_data, &expected_bitfield_data_after);
+    }
+
+    #[test]
+    fn set_field_data_tests() {
+        // bit_count == 1, single byte
+        test_set_field_data::<1, 1>([0b10110001], [0b00000001], 0 /*bit_start_index*/, 1 /*bit_count*/, [0b10110001]);
+    }
+ }
