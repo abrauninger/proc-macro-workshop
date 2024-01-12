@@ -129,7 +129,7 @@ pub fn set_field_data<const FIELD_DATA_BYTE_COUNT: usize>(
 #[cfg(test)]
 mod tests {
     use crate::*;
-    
+
     #[test]
     fn get_field_data_tests() {
         // bit_count == 1, single byte
@@ -191,7 +191,58 @@ mod tests {
 
     #[test]
     fn set_field_data_tests() {
-        // bit_count == 1, single byte
+        // bit_count == 1, single byte, setting to 1
         test_set_field_data::<1, 1>([0b10110001], [0b00000001], 0 /*bit_start_index*/, 1 /*bit_count*/, [0b10110001]);
+        test_set_field_data::<1, 1>([0b10110001], [0b00000001], 1 /*bit_start_index*/, 1 /*bit_count*/, [0b11110001]);
+        test_set_field_data::<1, 1>([0b10110001], [0b00000001], 2 /*bit_start_index*/, 1 /*bit_count*/, [0b10110001]);
+        test_set_field_data::<1, 1>([0b10110001], [0b00000001], 3 /*bit_start_index*/, 1 /*bit_count*/, [0b10110001]);
+        test_set_field_data::<1, 1>([0b10110001], [0b00000001], 4 /*bit_start_index*/, 1 /*bit_count*/, [0b10111001]);
+        test_set_field_data::<1, 1>([0b10110001], [0b00000001], 5 /*bit_start_index*/, 1 /*bit_count*/, [0b10110101]);
+        test_set_field_data::<1, 1>([0b10110001], [0b00000001], 6 /*bit_start_index*/, 1 /*bit_count*/, [0b10110011]);
+        test_set_field_data::<1, 1>([0b10110001], [0b00000001], 7 /*bit_start_index*/, 1 /*bit_count*/, [0b10110001]);
+
+        // bit_count == 1, single byte, setting to 0
+        test_set_field_data::<1, 1>([0b10110001], [0b00000000], 0 /*bit_start_index*/, 1 /*bit_count*/, [0b00110001]);
+        test_set_field_data::<1, 1>([0b10110001], [0b00000000], 1 /*bit_start_index*/, 1 /*bit_count*/, [0b10110001]);
+        test_set_field_data::<1, 1>([0b10110001], [0b00000000], 2 /*bit_start_index*/, 1 /*bit_count*/, [0b10010001]);
+        test_set_field_data::<1, 1>([0b10110001], [0b00000000], 3 /*bit_start_index*/, 1 /*bit_count*/, [0b10100001]);
+        test_set_field_data::<1, 1>([0b10110001], [0b00000000], 4 /*bit_start_index*/, 1 /*bit_count*/, [0b10110001]);
+        test_set_field_data::<1, 1>([0b10110001], [0b00000000], 5 /*bit_start_index*/, 1 /*bit_count*/, [0b10110001]);
+        test_set_field_data::<1, 1>([0b10110001], [0b00000000], 6 /*bit_start_index*/, 1 /*bit_count*/, [0b10110001]);
+        test_set_field_data::<1, 1>([0b10110001], [0b00000000], 7 /*bit_start_index*/, 1 /*bit_count*/, [0b10110000]);
+    
+        // bit_count == 2, multiple bytes, setting to 1
+        test_set_field_data::<2, 1>([0b10110001, 0b11100101], [0b00000011], 0 /*bit_start_index*/, 2 /*bit_count*/,  [0b11110001, 0b11100101]);
+        test_set_field_data::<2, 1>([0b10110001, 0b11100101], [0b00000011], 1 /*bit_start_index*/, 2 /*bit_count*/,  [0b11110001, 0b11100101]);
+        test_set_field_data::<2, 1>([0b10110001, 0b11100101], [0b00000011], 2 /*bit_start_index*/, 2 /*bit_count*/,  [0b10110001, 0b11100101]);
+        test_set_field_data::<2, 1>([0b10110001, 0b11100101], [0b00000011], 3 /*bit_start_index*/, 2 /*bit_count*/,  [0b10111001, 0b11100101]);
+        test_set_field_data::<2, 1>([0b10110001, 0b11100101], [0b00000011], 4 /*bit_start_index*/, 2 /*bit_count*/,  [0b10111101, 0b11100101]);
+        test_set_field_data::<2, 1>([0b10110001, 0b11100101], [0b00000011], 5 /*bit_start_index*/, 2 /*bit_count*/,  [0b10110111, 0b11100101]);
+        test_set_field_data::<2, 1>([0b10110001, 0b11100101], [0b00000011], 6 /*bit_start_index*/, 2 /*bit_count*/,  [0b10110011, 0b11100101]);
+        test_set_field_data::<2, 1>([0b10110001, 0b11100101], [0b00000011], 7 /*bit_start_index*/, 2 /*bit_count*/,  [0b10110001, 0b11100101]);
+        test_set_field_data::<2, 1>([0b10110001, 0b11100101], [0b00000011], 8 /*bit_start_index*/, 2 /*bit_count*/,  [0b10110001, 0b11100101]);
+        test_set_field_data::<2, 1>([0b10110001, 0b11100101], [0b00000011], 9 /*bit_start_index*/, 2 /*bit_count*/,  [0b10110001, 0b11100101]);
+        test_set_field_data::<2, 1>([0b10110001, 0b11100101], [0b00000011], 10 /*bit_start_index*/, 2 /*bit_count*/, [0b10110001, 0b11110101]);
+        test_set_field_data::<2, 1>([0b10110001, 0b11100101], [0b00000011], 11 /*bit_start_index*/, 2 /*bit_count*/, [0b10110001, 0b11111101]);
+        test_set_field_data::<2, 1>([0b10110001, 0b11100101], [0b00000011], 12 /*bit_start_index*/, 2 /*bit_count*/, [0b10110001, 0b11101101]);
+        test_set_field_data::<2, 1>([0b10110001, 0b11100101], [0b00000011], 13 /*bit_start_index*/, 2 /*bit_count*/, [0b10110001, 0b11100111]);
+        test_set_field_data::<2, 1>([0b10110001, 0b11100101], [0b00000011], 14 /*bit_start_index*/, 2 /*bit_count*/, [0b10110001, 0b11100111]);
+    
+        // bit_count == 2, multiple bytes, setting to 0
+        test_set_field_data::<2, 1>([0b10110001, 0b11100101], [0b00000000], 0 /*bit_start_index*/, 2 /*bit_count*/,  [0b00110001, 0b11100101]);
+        test_set_field_data::<2, 1>([0b10110001, 0b11100101], [0b00000000], 1 /*bit_start_index*/, 2 /*bit_count*/,  [0b10010001, 0b11100101]);
+        test_set_field_data::<2, 1>([0b10110001, 0b11100101], [0b00000000], 2 /*bit_start_index*/, 2 /*bit_count*/,  [0b10000001, 0b11100101]);
+        test_set_field_data::<2, 1>([0b10110001, 0b11100101], [0b00000000], 3 /*bit_start_index*/, 2 /*bit_count*/,  [0b10100001, 0b11100101]);
+        test_set_field_data::<2, 1>([0b10110001, 0b11100101], [0b00000000], 4 /*bit_start_index*/, 2 /*bit_count*/,  [0b10110001, 0b11100101]);
+        test_set_field_data::<2, 1>([0b10110001, 0b11100101], [0b00000000], 5 /*bit_start_index*/, 2 /*bit_count*/,  [0b10110001, 0b11100101]);
+        test_set_field_data::<2, 1>([0b10110001, 0b11100101], [0b00000000], 6 /*bit_start_index*/, 2 /*bit_count*/,  [0b10110000, 0b11100101]);
+        test_set_field_data::<2, 1>([0b10110001, 0b11100101], [0b00000000], 7 /*bit_start_index*/, 2 /*bit_count*/,  [0b10110000, 0b01100101]);
+        test_set_field_data::<2, 1>([0b10110001, 0b11100101], [0b00000000], 8 /*bit_start_index*/, 2 /*bit_count*/,  [0b10110001, 0b00100101]);
+        test_set_field_data::<2, 1>([0b10110001, 0b11100101], [0b00000000], 9 /*bit_start_index*/, 2 /*bit_count*/,  [0b10110001, 0b10000101]);
+        test_set_field_data::<2, 1>([0b10110001, 0b11100101], [0b00000000], 10 /*bit_start_index*/, 2 /*bit_count*/, [0b10110001, 0b11000101]);
+        test_set_field_data::<2, 1>([0b10110001, 0b11100101], [0b00000000], 11 /*bit_start_index*/, 2 /*bit_count*/, [0b10110001, 0b11100101]);
+        test_set_field_data::<2, 1>([0b10110001, 0b11100101], [0b00000000], 12 /*bit_start_index*/, 2 /*bit_count*/, [0b10110001, 0b11100001]);
+        test_set_field_data::<2, 1>([0b10110001, 0b11100101], [0b00000000], 13 /*bit_start_index*/, 2 /*bit_count*/, [0b10110001, 0b11100001]);
+        test_set_field_data::<2, 1>([0b10110001, 0b11100101], [0b00000000], 14 /*bit_start_index*/, 2 /*bit_count*/, [0b10110001, 0b11100100]);
     }
  }
