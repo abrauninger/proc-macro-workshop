@@ -244,5 +244,9 @@ mod tests {
         test_set_field_data::<2, 1>([0b10110001, 0b11100101], [0b00000000], 12 /*bit_start_index*/, 2 /*bit_count*/, [0b10110001, 0b11100001]);
         test_set_field_data::<2, 1>([0b10110001, 0b11100101], [0b00000000], 13 /*bit_start_index*/, 2 /*bit_count*/, [0b10110001, 0b11100001]);
         test_set_field_data::<2, 1>([0b10110001, 0b11100101], [0b00000000], 14 /*bit_start_index*/, 2 /*bit_count*/, [0b10110001, 0b11100100]);
+    
+        // bit_count == 6, multiple bytes
+        test_set_field_data::<2, 1>([0b10110001, 0b11100101], [0b00101010], 5 /*bit_start_index*/, 6 /*bit_count*/, [0b10110101, 0b01000101]);
+        test_set_field_data::<2, 1>([0b10110001, 0b11100101], [0b00010101], 5 /*bit_start_index*/, 6 /*bit_count*/, [0b10110010, 0b10100101]);
     }
  }
