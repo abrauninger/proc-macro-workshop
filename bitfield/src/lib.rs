@@ -248,5 +248,14 @@ mod tests {
         // bit_count == 6, multiple bytes
         test_set_field_data::<2, 1>([0b10110001, 0b11100101], [0b00101010], 5 /*bit_start_index*/, 6 /*bit_count*/, [0b10110101, 0b01000101]);
         test_set_field_data::<2, 1>([0b10110001, 0b11100101], [0b00010101], 5 /*bit_start_index*/, 6 /*bit_count*/, [0b10110010, 0b10100101]);
+    
+        // Data spanning multiple bytes, aligned on byte boundaries
+        test_set_field_data::<3, 3>([0b10110001, 0b11100101, 0b00101110], [0b10101010, 0b10101010, 0b10101010], 0 /*bit_start_index*/, 8 /*bit_count*/, [0b10101010, 0b11100101, 0b00101110]);
+        test_set_field_data::<3, 3>([0b10110001, 0b11100101, 0b00101110], [0b10101010, 0b10101010, 0b10101010], 0 /*bit_start_index*/, 16 /*bit_count*/, [0b10101010, 0b10101010, 0b00101110]);
+        test_set_field_data::<3, 3>([0b10110001, 0b11100101, 0b00101110], [0b10101010, 0b10101010, 0b10101010], 0 /*bit_start_index*/, 24 /*bit_count*/, [0b10101010, 0b10101010, 0b10101010]);
+    
+        // Data spanning multiple bytes, but not *quite* byte-boundary-aligned
+        test_set_field_data::<3, 3>([0b10110001, 0b11100101, 0b00101110], [0b10101010, 0b10101010, 0b10101010], 1 /*bit_start_index*/, 23 /*bit_count*/, [0b10101010, 0b10101010, 0b10101010]);
+        test_set_field_data::<3, 3>([0b10110001, 0b11100101, 0b00101110], [0b10101010, 0b10101010, 0b10101010], 0 /*bit_start_index*/, 23 /*bit_count*/, [0b01010101, 0b01010101, 0b01010100]);
     }
  }
