@@ -19,6 +19,15 @@ pub trait Specifier {
 
 gen_bit_width_types!(1..=64);
 
+pub mod checks {
+    pub trait TotalSizeIsMultipleOfEightBits {}
+
+    pub struct ZeroMod8 {}
+    pub struct SevenMod8 {}
+
+    impl TotalSizeIsMultipleOfEightBits for ZeroMod8 {}
+}
+
 // Helper functions
 // TODO: Move these to a detail module?
 

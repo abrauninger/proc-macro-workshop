@@ -92,6 +92,10 @@ fn bitfield_impl(input: TokenStream) -> syn::Result<TokenStream> {
                         Self { data: [0; (0 #bit_widths) / 8] }
                     }
 
+                    fn checks() -> impl ::bitfield::checks::TotalSizeIsMultipleOfEightBits {
+                        ::bitfield::checks::SevenMod8 {}
+                    }
+
                     #accessors
                 }
             }.into())
