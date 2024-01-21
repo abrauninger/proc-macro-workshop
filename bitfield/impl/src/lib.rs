@@ -52,7 +52,7 @@ fn bitfield_impl(input: TokenStream) -> syn::Result<TokenStream> {
                             let current_field_bit_start_index = 0 #previous_bit_widths;
                             let current_field_bit_count = #current_field_bit_count;
 
-                            if (current_field_bit_count > 64) {
+                            if current_field_bit_count > 64 {
                                 panic!("Unable to get a field value that is wider than 64 bits.");
                             }
 
@@ -93,7 +93,9 @@ fn bitfield_impl(input: TokenStream) -> syn::Result<TokenStream> {
                     }
 
                     fn checks() -> impl ::bitfield::checks::TotalSizeIsMultipleOfEightBits {
-                        ::bitfield::checks::SevenMod8 {}
+                        const mod8: usize = (0 #bit_widths) % 8;
+                        type ReturnType = <::bitfield::checks::Mod8::<mod8> as ::bitfield::checks::Mod8Check>::Type;
+                        ReturnType {}
                     }
 
                     #accessors
