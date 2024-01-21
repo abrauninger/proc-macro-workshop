@@ -43,36 +43,31 @@ fn bitfield_impl(input: TokenStream) -> syn::Result<TokenStream> {
                         }).collect();
 
                     let current_field_bit_count = quote!(<#ty as ::bitfield::Specifier>::BITS);
+                    let current_field_accessor_type_name = quote!(<#ty as ::bitfield::Specifier>::ACCESSOR);
 
                     let getter_name = format_ident!("get_{}", ident);
                     let setter_name = format_ident!("set_{}", ident);
 
                     quote! {
-                        fn #getter_name(&self) -> u64 {
+                        fn #getter_name(&self) -> #current_field_accessor_type_name {
                             let current_field_bit_start_index = 0 #previous_bit_widths;
                             let current_field_bit_count = #current_field_bit_count;
 
-                            if current_field_bit_count > 64 {
-                                panic!("Unable to get a field value that is wider than 64 bits.");
-                            }
+                            const accessor_size: usize = std::mem::size_of::<#current_field_accessor_type_name>();
 
-                            // Currently all fields are u64
-                            let field_data = ::bitfield::get_field_data::<8>(&self.data, current_field_bit_start_index, current_field_bit_count);
-                            u64::from_le_bytes(field_data)
+                            let field_data = ::bitfield::get_field_data::<accessor_size>(&self.data, current_field_bit_start_index, current_field_bit_count);
+                            #current_field_accessor_type_name::from_le_bytes(field_data)
                         }
 
-                        fn #setter_name(&mut self, val: u64) {
+                        fn #setter_name(&mut self, val: #current_field_accessor_type_name) {
                             let current_field_bit_start_index = 0 #previous_bit_widths;
                             let current_field_bit_count = #current_field_bit_count;
 
-                            if (current_field_bit_count > 64) {
-                                panic!("Unable to get a field value that is wider than 64 bits.");
-                            }
+                            const accessor_size: usize = std::mem::size_of::<#current_field_accessor_type_name>();
 
                             let field_data = val.to_le_bytes();
 
-                            // Currently all fields are u64
-                            ::bitfield::set_field_data::<8>(&mut self.data, field_data, current_field_bit_start_index, current_field_bit_count);
+                            ::bitfield::set_field_data::<accessor_size>(&mut self.data, field_data, current_field_bit_start_index, current_field_bit_count);
                         }
                     }
                 } else {
@@ -125,11 +120,15 @@ fn gen_bit_width_types_impl(input: TokenStream) -> syn::Result<TokenStream> {
 
     for bit_width in start..=end {
         let type_name = format_ident!("B{}", bit_width);
+        let accessor_type_size = std::cmp::max(bit_width.next_power_of_two(), 8);
+        let accessor_type_name = format_ident!("u{}", accessor_type_size);
+
         types.push(quote!{
             pub enum #type_name {}
 
             impl Specifier for #type_name {
                 const BITS: usize = #bit_width;
+                type ACCESSOR = #accessor_type_name;
             }
         });
     }

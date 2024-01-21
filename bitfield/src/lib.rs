@@ -15,6 +15,7 @@ use bitfield_impl::gen_bit_width_types;
 
 pub trait Specifier {
     const BITS: usize;
+    type ACCESSOR;
 }
 
 gen_bit_width_types!(1..=64);
