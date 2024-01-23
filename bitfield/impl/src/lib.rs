@@ -1,4 +1,5 @@
 use proc_macro::TokenStream;
+use syn::{parse_macro_input, DeriveInput};
 
 mod bitfield;
 use crate::bitfield::bitfield_impl;
@@ -12,6 +13,15 @@ pub fn bitfield(_args: TokenStream, input: TokenStream) -> TokenStream {
         Ok(output) => output,
         Err(err) => err.to_compile_error().into()
     }
+}
+
+#[proc_macro_derive(BitfieldSpecifier)]
+pub fn bitfield_specifier_derive(input: TokenStream) -> TokenStream {
+    let derive_input = parse_macro_input!(input as DeriveInput);
+
+    let DeriveInput { ident: _enum_name, data: _a, .. } = derive_input;
+
+    TokenStream::new()
 }
 
 #[proc_macro]

@@ -14,6 +14,7 @@ pub mod field_data;
 // From the perspective of a user of this crate, they get all the necessary APIs
 // (macro, trait, struct) through the one bitfield crate.
 pub use bitfield_impl::bitfield;
+pub use bitfield_impl::BitfieldSpecifier;
 use bitfield_impl::gen_bit_width_types;
 
 pub trait Specifier {
