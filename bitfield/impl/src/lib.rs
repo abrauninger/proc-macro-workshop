@@ -55,7 +55,7 @@ fn bitfield_impl(input: TokenStream) -> syn::Result<TokenStream> {
 
                             const accessor_size: usize = std::mem::size_of::<#current_field_accessor_type_name>();
 
-                            let field_data = ::bitfield::get_field_data::<accessor_size>(&self.data, current_field_bit_start_index, current_field_bit_count);
+                            let field_data = ::bitfield::field_data::get_field_data::<accessor_size>(&self.data, current_field_bit_start_index, current_field_bit_count);
                             #current_field_accessor_type_name::from_le_bytes(field_data)
                         }
 
@@ -67,7 +67,7 @@ fn bitfield_impl(input: TokenStream) -> syn::Result<TokenStream> {
 
                             let field_data = val.to_le_bytes();
 
-                            ::bitfield::set_field_data::<accessor_size>(&mut self.data, field_data, current_field_bit_start_index, current_field_bit_count);
+                            ::bitfield::field_data::set_field_data::<accessor_size>(&mut self.data, field_data, current_field_bit_start_index, current_field_bit_count);
                         }
                     }
                 } else {
