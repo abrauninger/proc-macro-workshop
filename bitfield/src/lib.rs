@@ -23,3 +23,8 @@ pub trait Specifier {
 }
 
 gen_bit_width_types!(1..=64);
+
+impl Specifier for bool {
+    const BITS: usize = 1;
+    type ACCESSOR = bool;
+}
