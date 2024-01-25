@@ -45,21 +45,20 @@ pub fn bitfield_impl(input: TokenStream) -> syn::Result<TokenStream> {
                             let current_field_bit_start_index = 0 #previous_bit_widths;
                             let current_field_bit_count = #current_field_bit_count;
 
-                            const accessor_size: usize = std::mem::size_of::<#current_field_accessor_type_name>();
+                            const SIZE: usize = std::mem::size_of::<#current_field_accessor_type_name>();
 
-                            let field_data = ::bitfield::field_data::get_field_data::<accessor_size>(&self.data, current_field_bit_start_index, current_field_bit_count);
-                            #current_field_accessor_type_name::from_le_bytes(field_data)
+                            let field_data = ::bitfield::field_data::get_field_data::<SIZE>(&self.data, current_field_bit_start_index, current_field_bit_count);
+                            <#current_field_accessor_type_name as ::bitfield::Serialize<SIZE>>::deserialize(field_data)
                         }
 
                         fn #setter_name(&mut self, val: #current_field_accessor_type_name) {
                             let current_field_bit_start_index = 0 #previous_bit_widths;
                             let current_field_bit_count = #current_field_bit_count;
 
-                            const accessor_size: usize = std::mem::size_of::<#current_field_accessor_type_name>();
+                            const SIZE: usize = std::mem::size_of::<#current_field_accessor_type_name>();
 
-                            let field_data = val.to_le_bytes();
-
-                            ::bitfield::field_data::set_field_data::<accessor_size>(&mut self.data, field_data, current_field_bit_start_index, current_field_bit_count);
+                            let field_data = <#current_field_accessor_type_name as ::bitfield::Serialize<SIZE>>::serialize(val);
+                            ::bitfield::field_data::set_field_data::<SIZE>(&mut self.data, field_data, current_field_bit_start_index, current_field_bit_count);
                         }
                     }
                 } else {
